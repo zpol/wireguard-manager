@@ -17,7 +17,8 @@ services:
       - DB_NAME=wireguard
       - JWT_SECRET=${JWT_SECRET}
       - WIREGUARD_CONFIG_PATH=/etc/wireguard
-      - WG_PUBLIC_IP=
+      - WG_PUBLIC_IP=${WG_PUBLIC_IP}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
     volumes:
       # - ./backend:/app
       - wireguard_config:/etc/wireguard

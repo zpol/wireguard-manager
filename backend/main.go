@@ -60,7 +60,12 @@ func createDefaultAdmin() error {
 		return nil // Admin already exists
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+	adminPassword := getEnv("DEFAULT_ADMIN_PASSWORD", "admin")
+	if adminPassword == "admin" {
+		log.Println("[WARNING] Using default admin password. Please set DEFAULT_ADMIN_PASSWORD environment variable for production.")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
@@ -76,7 +81,7 @@ func createDefaultAdmin() error {
 		return err
 	}
 
-	log.Println("Default admin user created: admin/admin")
+	log.Printf("Default admin user created: admin/%s", adminPassword)
 	return nil
 }
 
