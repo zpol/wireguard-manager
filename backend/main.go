@@ -553,8 +553,15 @@ func getPeerQRCode(c *gin.Context) {
 		return
 	}
 
+	// Obtener la IP pública desde la variable de entorno
+	publicIP := os.Getenv("WG_PUBLIC_IP")
+	if publicIP == "" {
+		log.Println("[ERROR] WG_PUBLIC_IP environment variable not set")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "WG_PUBLIC_IP environment variable not set"})
+		return
+	}
+
 	// Generate WireGuard config for the peer
-	// This is a client config, so the "Peer" section uses the server's public key
 	config := fmt.Sprintf(`[Interface]
 PrivateKey = %s
 Address = %s
@@ -564,7 +571,7 @@ DNS = %s
 PublicKey = %s
 AllowedIPs = %s
 Endpoint = %s:%d
-PersistentKeepalive = 25`, peer.PrivateKey, peer.Address, peer.DNS, server.PublicKey, peer.AllowedIPs, "your-server-ip", server.ListenPort) // TODO: Make endpoint IP configurable
+PersistentKeepalive = 25`, peer.PrivateKey, peer.Address, peer.DNS, server.PublicKey, peer.AllowedIPs, publicIP, server.ListenPort)
 
 	// Generate QR code PNG using qrencode
 	cmd := exec.Command("qrencode", "-o", "-", "-t", "PNG")
@@ -599,6 +606,14 @@ func getPeerConfig(c *gin.Context) {
 		return
 	}
 
+	// Obtener la IP pública desde la variable de entorno
+	publicIP := os.Getenv("WG_PUBLIC_IP")
+	if publicIP == "" {
+		log.Println("[ERROR] WG_PUBLIC_IP environment variable not set")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "WG_PUBLIC_IP environment variable not set"})
+		return
+	}
+
 	// Generate WireGuard config
 	config := fmt.Sprintf(`[Interface]
 PrivateKey = %s
@@ -609,7 +624,7 @@ DNS = %s
 PublicKey = %s
 AllowedIPs = %s
 Endpoint = %s:%d
-PersistentKeepalive = 25`, peer.PrivateKey, peer.Address, peer.DNS, server.PublicKey, peer.AllowedIPs, "your-server-ip", server.ListenPort)
+PersistentKeepalive = 25`, peer.PrivateKey, peer.Address, peer.DNS, server.PublicKey, peer.AllowedIPs, publicIP, server.ListenPort)
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=wg-%s.conf", peer.Name))
