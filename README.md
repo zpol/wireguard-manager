@@ -2,6 +2,20 @@
 
 A secure and modern web interface to manage WireGuard VPN servers and peers.
 
+## 📸 Screenshots
+
+### Dashboard
+![Dashboard](doc/images/dashboard.png)
+
+### User Management
+![User Management](doc/images/users.png)
+
+### Add Server
+![Add Server](doc/images/add-server.png)
+
+### Add Peers
+![Add Peers](doc/images/add-peers.png)
+
 ## 🚀 Main Features
 
 ### ✅ User Management
