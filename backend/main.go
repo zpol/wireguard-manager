@@ -144,6 +144,9 @@ func main() {
 
 		// WireGuard management
 		authorized.POST("/wg/genkeys", wgGenKeys)
+
+		// Dashboard stats
+		authorized.GET("/stats", getStats)
 	}
 
 	// Start server
@@ -951,4 +954,30 @@ func getServerStatus(c *gin.Context) {
 
 	// If there's output and no error, it's active.
 	c.JSON(http.StatusOK, gin.H{"status": "active", "details": string(out)})
+}
+
+// Handler para /api/stats
+func getStats(c *gin.Context) {
+	var totalServers int64
+	db.Model(&models.Server{}).Count(&totalServers)
+
+	var totalPeers int64
+	db.Model(&models.Peer{}).Count(&totalPeers)
+
+	var activePeers int64
+	db.Model(&models.Peer{}).Where("status = ?", "active").Count(&activePeers)
+
+	var rx, tx int64
+	db.Model(&models.Peer{}).Select("COALESCE(SUM(transfer_rx),0)").Scan(&rx)
+	db.Model(&models.Peer{}).Select("COALESCE(SUM(transfer_tx),0)").Scan(&tx)
+
+	c.JSON(200, gin.H{
+		"totalServers": totalServers,
+		"totalPeers": totalPeers,
+		"activePeers": activePeers,
+		"traffic": gin.H{
+			"rx": rx,
+			"tx": tx,
+		},
+	})
 } 
