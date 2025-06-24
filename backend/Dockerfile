@@ -5,7 +5,7 @@ FROM golang:1.23-alpine
 WORKDIR /app
 
 # Install dependencies for building
-RUN apk update && apk add --no-cache git build-base docker-cli qrencode
+RUN apk update && apk add --no-cache git build-base docker-cli libqrencode-tools
 
 # Copy the entire backend source code
 COPY . .
