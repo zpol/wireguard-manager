@@ -861,38 +861,40 @@ func startServer(c *gin.Context) {
 
 	interfaceName := getInterfaceName(server.ConfigPath)
 
-	// Try to bring it down first to handle zombie interfaces
-	log.Printf("[DEBUG] Ensuring interface is down before starting: wg-quick down %s", interfaceName)
-	exec.Command("wg-quick", "down", interfaceName).Run() // Ignore errors, it's ok if it doesn't exist
+	go func() {
+		// Try to bring it down first to handle zombie interfaces
+		log.Printf("[DEBUG] BG: Ensuring interface is down before starting: wg-quick down %s", interfaceName)
+		exec.Command("wg-quick", "down", interfaceName).Run() // Ignore errors, it's ok if it doesn't exist
 
-	configContent, err := generateServerConfig(*server)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate server config", "details": err.Error()})
-		return
-	}
+		configContent, err := generateServerConfig(*server)
+		if err != nil {
+			log.Printf("[ERROR] BG: Failed to generate server config for start: %v", err)
+			return
+		}
 
-	// Ensure the directory exists before writing the file
-	configDir := filepath.Dir(server.ConfigPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create config directory", "details": err.Error()})
-		return
-	}
+		// Ensure the directory exists before writing the file
+		configDir := filepath.Dir(server.ConfigPath)
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			log.Printf("[ERROR] BG: Failed to create config directory for start: %v", err)
+			return
+		}
 
-	if err := ioutil.WriteFile(server.ConfigPath, []byte(configContent), 0600); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write config file", "details": err.Error()})
-		return
-	}
+		if err := ioutil.WriteFile(server.ConfigPath, []byte(configContent), 0600); err != nil {
+			log.Printf("[ERROR] BG: Failed to write config file for start: %v", err)
+			return
+		}
 
-	cmd := exec.Command("wg-quick", "up", interfaceName)
-	log.Printf("[DEBUG] Running command: wg-quick up %s", interfaceName)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("[ERROR] Failed to start server %s. Output: %s, Error: %v", interfaceName, string(out), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to start server %s", interfaceName), "details": string(out)})
-		return
-	}
-	log.Printf("[INFO] Server %s started successfully. Output: %s", interfaceName, string(out))
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Server %s started successfully", interfaceName), "output": string(out)})
+		cmd := exec.Command("wg-quick", "up", interfaceName)
+		log.Printf("[DEBUG] BG: Running command: wg-quick up %s", interfaceName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR] BG: Failed to start server %s. Output: %s, Error: %v", interfaceName, string(out), err)
+		} else {
+			log.Printf("[INFO] BG: Server %s started successfully. Output: %s", interfaceName, string(out))
+		}
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"message": fmt.Sprintf("Start for server %s initiated in background", interfaceName)})
 }
 
 func stopServer(c *gin.Context) {
@@ -903,16 +905,19 @@ func stopServer(c *gin.Context) {
 	}
 
 	interfaceName := getInterfaceName(server.ConfigPath)
-	cmd := exec.Command("wg-quick", "down", interfaceName)
-	log.Printf("[DEBUG] Running command: wg-quick down %s", interfaceName)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("[ERROR] Failed to stop server %s. Output: %s, Error: %v", interfaceName, string(out), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to stop server %s", interfaceName), "details": string(out)})
-		return
-	}
-	log.Printf("[INFO] Server %s stopped successfully. Output: %s", interfaceName, string(out))
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Server %s stopped successfully", interfaceName), "output": string(out)})
+
+	go func() {
+		cmd := exec.Command("wg-quick", "down", interfaceName)
+		log.Printf("[DEBUG] BG: Running command: wg-quick down %s", interfaceName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR] BG: Failed to stop server %s. Output: %s, Error: %v", interfaceName, string(out), err)
+		} else {
+			log.Printf("[INFO] BG: Server %s stopped successfully. Output: %s", interfaceName, string(out))
+		}
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"message": fmt.Sprintf("Stop for server %s initiated in background", interfaceName)})
 }
 
 func restartServer(c *gin.Context) {
@@ -923,38 +928,41 @@ func restartServer(c *gin.Context) {
 	}
 
 	interfaceName := getInterfaceName(server.ConfigPath)
-	// First, try to bring it down (ignoring errors if it's already down)
-	log.Printf("[DEBUG] Stopping server for restart: wg-quick down %s", interfaceName)
-	exec.Command("wg-quick", "down", interfaceName).Run()
 
-	// Regenerate config in case peers have changed
-	configContent, err := generateServerConfig(*server)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate server config", "details": err.Error()})
-		return
-	}
-	// Ensure the directory exists before writing the file
-	configDir := filepath.Dir(server.ConfigPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create config directory", "details": err.Error()})
-		return
-	}
-	if err := ioutil.WriteFile(server.ConfigPath, []byte(configContent), 0600); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write config file", "details": err.Error()})
-		return
-	}
+	go func() {
+		// First, try to bring it down (ignoring errors if it's already down)
+		log.Printf("[DEBUG] BG: Stopping server for restart: wg-quick down %s", interfaceName)
+		exec.Command("wg-quick", "down", interfaceName).Run()
 
-	// Then, bring it up
-	cmd := exec.Command("wg-quick", "up", interfaceName)
-	log.Printf("[DEBUG] Starting server after restart: wg-quick up %s", interfaceName)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("[ERROR] Failed to restart server %s. Output: %s, Error: %v", interfaceName, string(out), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to restart server %s", interfaceName), "details": string(out)})
-		return
-	}
-	log.Printf("[INFO] Server %s restarted successfully. Output: %s", interfaceName, string(out))
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Server %s restarted successfully", interfaceName), "output": string(out)})
+		// Regenerate config in case peers have changed
+		configContent, err := generateServerConfig(*server)
+		if err != nil {
+			log.Printf("[ERROR] BG: Failed to generate server config for restart: %v", err)
+			return
+		}
+		// Ensure the directory exists before writing the file
+		configDir := filepath.Dir(server.ConfigPath)
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			log.Printf("[ERROR] BG: Failed to create config directory for restart: %v", err)
+			return
+		}
+		if err := ioutil.WriteFile(server.ConfigPath, []byte(configContent), 0600); err != nil {
+			log.Printf("[ERROR] BG: Failed to write config file for restart: %v", err)
+			return
+		}
+
+		// Then, bring it up
+		cmd := exec.Command("wg-quick", "up", interfaceName)
+		log.Printf("[DEBUG] BG: Starting server after restart: wg-quick up %s", interfaceName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR] BG: Failed to restart server %s. Output: %s, Error: %v", interfaceName, string(out), err)
+		} else {
+			log.Printf("[INFO] BG: Server %s restarted successfully. Output: %s", interfaceName, string(out))
+		}
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"message": fmt.Sprintf("Restart for server %s initiated in background", interfaceName)})
 }
 
 func getServerStatus(c *gin.Context) {
