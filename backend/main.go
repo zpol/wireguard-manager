@@ -22,6 +22,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"backend/models"
 	"github.com/satori/go.uuid"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 var (
@@ -784,21 +785,18 @@ func getMe(c *gin.Context) {
 
 // Endpoint: Generar claves privadas/públicas
 func wgGenKeys(c *gin.Context) {
-	privKeyBytes, err := exec.Command("wg", "genkey").Output()
+	// Generate keys using the native Go library instead of shelling out to wg
+	key, err := wgtypes.GeneratePrivateKey()
 	if err != nil {
-		c.JSON(500, gin.H{"error": "No se pudo generar clave privada", "details": err.Error()})
+		log.Printf("[ERROR] Failed to generate private key: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate private key", "details": err.Error()})
 		return
 	}
-	privKey := string(privKeyBytes)
-	pubKeyCmd := exec.Command("wg", "pubkey")
-	pubKeyCmd.Stdin = bytes.NewReader(privKeyBytes)
-	pubKeyBytes, err := pubKeyCmd.Output()
-	if err != nil {
-		c.JSON(500, gin.H{"error": "No se pudo generar clave pública", "details": err.Error()})
-		return
-	}
-	pubKey := string(pubKeyBytes)
-	c.JSON(200, gin.H{"privateKey": privKey, "publicKey": pubKey})
+
+	privKey := key.String()
+	pubKey := key.PublicKey().String()
+
+	c.JSON(http.StatusOK, gin.H{"privateKey": privKey, "publicKey": pubKey})
 }
 
 func getInterfaceName(configPath string) string {
