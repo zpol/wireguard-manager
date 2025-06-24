@@ -1006,8 +1006,63 @@ func wgGenKeys(c *gin.Context) {
 }
 
 func getStats(c *gin.Context) {
-	// Implementation of getStats function
-	c.JSON(http.StatusOK, gin.H{"message": "Stats endpoint not implemented yet"})
+	// Total servers
+	var totalServers int64
+	db.Model(&models.Server{}).Count(&totalServers)
+
+	// Total peers
+	var totalPeers int64
+	db.Model(&models.Peer{}).Count(&totalPeers)
+
+	// Active peers
+	var activePeers int64
+	db.Model(&models.Peer{}).Where("status = ?", "active").Count(&activePeers)
+
+	// Tráfico global
+	var totalRx, totalTx int64
+	db.Model(&models.Peer{}).Select("COALESCE(SUM(transfer_rx),0)").Scan(&totalRx)
+	db.Model(&models.Peer{}).Select("COALESCE(SUM(transfer_tx),0)").Scan(&totalTx)
+
+	// Tráfico por servidor
+	var servers []models.Server
+	db.Preload("Peers").Find(&servers)
+	serverStats := make([]map[string]interface{}, 0)
+	for _, s := range servers {
+		rx, tx := int64(0), int64(0)
+		for _, p := range s.Peers {
+			rx += p.TransferRx
+			tx += p.TransferTx
+		}
+		serverStats = append(serverStats, map[string]interface{}{
+			"id": s.ID,
+			"name": s.Name,
+			"rx": rx,
+			"tx": tx,
+		})
+	}
+
+	// Tráfico por peer
+	var peers []models.Peer
+	db.Find(&peers)
+	peerStats := make([]map[string]interface{}, 0)
+	for _, p := range peers {
+		peerStats = append(peerStats, map[string]interface{}{
+			"id": p.ID,
+			"name": p.Name,
+			"serverID": p.ServerID,
+			"rx": p.TransferRx,
+			"tx": p.TransferTx,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"totalServers": totalServers,
+		"totalPeers": totalPeers,
+		"activePeers": activePeers,
+		"traffic": gin.H{"rx": totalRx, "tx": totalTx},
+		"servers": serverStats,
+		"peers": peerStats,
+	})
 }
 
 func startServer(c *gin.Context) {
