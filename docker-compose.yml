@@ -6,11 +6,11 @@ services:
       - "8080:8080"
     environment:
       - DB_HOST=postgres
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=wireguard_manager
-      - JWT_SECRET=${JWT_SECRET:-your-very-secret-key}
-      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin}
+      - DB_USER=wireguard
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=wireguard
+      - JWT_SECRET=${JWT_SECRET}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
       - WG_PUBLIC_IP=${WG_PUBLIC_IP}
       - HOST_WG_CONFIGS_PATH=${PWD}/wg-configs
     volumes:
