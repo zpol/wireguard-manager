@@ -51,6 +51,8 @@ const Servers: React.FC = () => {
     mtu: 1420,
     initialPeers: 1,
   });
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const fetchServers = useCallback(async () => {
     setLoading(true);
@@ -70,6 +72,8 @@ const Servers: React.FC = () => {
   }, [fetchServers]);
 
   const handleCreateServer = async () => {
+    setCreateLoading(true);
+    setCreateError(null);
     try {
       const keysResponse = await axios.post(`${process.env.REACT_APP_API_URL}/api/wg/genkeys`);
       const { privateKey, publicKey } = keysResponse.data;
@@ -85,7 +89,9 @@ const Servers: React.FC = () => {
       setOpen(false);
       fetchServers();
     } catch (error: any) {
-      alert('Error creating server: ' + (error.response?.data?.error || error.message));
+      setCreateError(error.response?.data?.error || error.message);
+    } finally {
+      setCreateLoading(false);
     }
   };
   
@@ -180,7 +186,7 @@ const Servers: React.FC = () => {
           </Table>
         </TableContainer>
       
-      <Dialog open={open} onClose={() => setOpen(false)}>
+      <Dialog open={open} onClose={() => { setOpen(false); setCreateError(null); }}>
         <DialogTitle>Add New Server</DialogTitle>
         <DialogContent>
           <TextField
@@ -235,11 +241,16 @@ const Servers: React.FC = () => {
               setNewServer({ ...newServer, initialPeers: parseInt(e.target.value) })
             }
           />
+          {createError && (
+            <Typography color="error" sx={{ mt: 1, mb: 1 }}>
+              {createError}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateServer} variant="contained">
-            Create
+          <Button onClick={() => { setOpen(false); setCreateError(null); }} disabled={createLoading}>Cancel</Button>
+          <Button onClick={handleCreateServer} variant="contained" disabled={createLoading}>
+            {createLoading ? 'Creating...' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>
