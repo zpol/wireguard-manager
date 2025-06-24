@@ -78,7 +78,6 @@ const Servers: React.FC = () => {
         ...newServer,
         publicKey,
         privateKey,
-        configPath: `/etc/wireguard/${newServer.name}.conf`,
         initialPeers: newServer.initialPeers,
       };
 
