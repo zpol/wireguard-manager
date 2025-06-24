@@ -431,6 +431,25 @@ func listServers(c *gin.Context) {
 
 func deleteServer(c *gin.Context) {
 	id := c.Param("id")
+
+	// Buscar el servidor para obtener el ContainerName antes de eliminarlo
+	var server models.Server
+	if err := db.First(&server, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	if server.ContainerName != "" {
+		// Eliminar el contenedor Docker asociado si existe
+		cmd := exec.Command("docker", "rm", "-f", server.ContainerName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[WARNING] Could not remove container %s: %v, Output: %s", server.ContainerName, err, string(out))
+		} else {
+			log.Printf("[INFO] Removed container %s before deleting server", server.ContainerName)
+		}
+	}
+
 	if err := db.Delete(&models.Server{}, id).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete server"})
 		return
@@ -936,9 +955,24 @@ func startServer(c *gin.Context) {
 	}
 
 	go func() {
-		// Ensure any old container with the same name is gone
+		// 1. Eliminar cualquier contenedor con el mismo nombre
 		log.Printf("[DEBUG] BG: Removing any existing container named %s", server.ContainerName)
 		exec.Command("docker", "rm", "-f", server.ContainerName).Run()
+
+		// 2. Eliminar cualquier contenedor que esté usando el puerto deseado
+		// Buscar contenedores que tengan el puerto mapeado
+		portStr := fmt.Sprintf("%d/udp", server.ListenPort)
+		cmd := exec.Command("docker", "ps", "--filter", fmt.Sprintf("publish=%s", portStr), "--format", "{{.ID}}")
+		out, err := cmd.CombinedOutput()
+		if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+			containerIDs := strings.Split(strings.TrimSpace(string(out)), "\n")
+			for _, cid := range containerIDs {
+				if cid != "" {
+					log.Printf("[DEBUG] BG: Removing container %s that is using port %s", cid, portStr)
+					exec.Command("docker", "rm", "-f", cid).Run()
+				}
+			}
+		}
 
 		publicIP := getEnv("WG_PUBLIC_IP", "")
 		if publicIP == "" {
@@ -947,10 +981,9 @@ func startServer(c *gin.Context) {
 		}
 
 		// Use the server.ConfigPath for the volume mount on the host side.
-		// This path is /etc/wireguard, which is mapped to the 'wireguard_config' volume.
 		hostConfigPath := server.ConfigPath
 		
-		cmd := exec.Command("docker", "run", "-d",
+		cmd = exec.Command("docker", "run", "-d",
 			"--name="+server.ContainerName,
 			"--cap-add=NET_ADMIN",
 			"--cap-add=SYS_MODULE",
@@ -974,7 +1007,7 @@ func startServer(c *gin.Context) {
 		)
 
 		log.Printf("[DEBUG] BG: Running command: %s", cmd.String())
-		out, err := cmd.CombinedOutput()
+		out, err = cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("[ERROR] BG: Failed to start container for server %s. Output: %s, Error: %v", server.Name, string(out), err)
 		} else {
