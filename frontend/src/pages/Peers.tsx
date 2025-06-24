@@ -182,6 +182,7 @@ const Peers: React.FC = () => {
               <TableCell>Address</TableCell>
               <TableCell>DNS</TableCell>
               <TableCell>Allowed IPs</TableCell>
+              <TableCell>Server</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
@@ -189,52 +190,56 @@ const Peers: React.FC = () => {
           <TableBody>
             {error ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={8} align="center">
                   {error}
                 </TableCell>
               </TableRow>
             ) : Array.isArray(peers) ? (
               peers.length > 0 ? (
-                peers.map((peer) => (
-                  <TableRow key={peer.id}>
-                    <TableCell>{peer.name}</TableCell>
-                    <TableCell>{peer.publicKey}</TableCell>
-                    <TableCell>{peer.address}</TableCell>
-                    <TableCell>{peer.dns}</TableCell>
-                    <TableCell>{peer.allowedIPs}</TableCell>
-                    <TableCell>{peer.status}</TableCell>
-                    <TableCell>
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleShowQRCode(peer)}
-                      >
-                        <QrCodeIcon />
-                      </IconButton>
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleDownloadConfig(peer)}
-                      >
-                        <DownloadIcon />
-                      </IconButton>
-                      <IconButton
-                        color="error"
-                        onClick={() => handleDeletePeer(peer.id)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
+                peers.map((peer) => {
+                  const server = servers.find(s => s.id === peer.serverID);
+                  return (
+                    <TableRow key={peer.id}>
+                      <TableCell>{peer.name}</TableCell>
+                      <TableCell>{peer.publicKey}</TableCell>
+                      <TableCell>{peer.address}</TableCell>
+                      <TableCell>{peer.dns}</TableCell>
+                      <TableCell>{peer.allowedIPs}</TableCell>
+                      <TableCell>{server ? server.name : '-'}</TableCell>
+                      <TableCell>{peer.status}</TableCell>
+                      <TableCell>
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleShowQRCode(peer)}
+                        >
+                          <QrCodeIcon />
+                        </IconButton>
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleDownloadConfig(peer)}
+                        >
+                          <DownloadIcon />
+                        </IconButton>
+                        <IconButton
+                          color="error"
+                          onClick={() => handleDeletePeer(peer.id)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={8} align="center">
                     No hay peers configurados.
                   </TableCell>
                 </TableRow>
               )
             ) : (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={8} align="center">
                   Error: Peers data is invalid.
                 </TableCell>
               </TableRow>
