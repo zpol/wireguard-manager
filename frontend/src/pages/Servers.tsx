@@ -49,6 +49,7 @@ const Servers: React.FC = () => {
     address: '10.0.0.1/24',
     dns: '8.8.8.8',
     mtu: 1420,
+    initialPeers: 1,
   });
 
   const fetchServers = useCallback(async () => {
@@ -78,6 +79,7 @@ const Servers: React.FC = () => {
         publicKey,
         privateKey,
         configPath: `/etc/wireguard/${newServer.name}.conf`,
+        initialPeers: newServer.initialPeers,
       };
 
       await axios.post(`${process.env.REACT_APP_API_URL}/api/servers`, serverData);
@@ -222,6 +224,16 @@ const Servers: React.FC = () => {
             value={newServer.mtu}
             onChange={(e) =>
               setNewServer({ ...newServer, mtu: parseInt(e.target.value) })
+            }
+          />
+          <TextField
+            margin="dense"
+            label="Initial Peers"
+            type="number"
+            fullWidth
+            value={newServer.initialPeers}
+            onChange={(e) =>
+              setNewServer({ ...newServer, initialPeers: parseInt(e.target.value) })
             }
           />
         </DialogContent>
