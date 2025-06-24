@@ -7,7 +7,8 @@ RUN apk update
 RUN apk add --no-cache \
     wireguard-tools \
     libqrencode-tools \
-    git
+    git \
+    iptables
 
 # Set working directory
 WORKDIR /app
