@@ -1,20 +1,22 @@
 # Use a Golang image
-FROM golang:1.21-alpine
+FROM golang:1.23-alpine
 
 # Set the working directory
 WORKDIR /app
 
-# Install dependencies needed for the application
-# - wireguard-tools and iptables are no longer needed in this container
-# - Add docker-cli to manage other containers
+# Install dependencies for building
 RUN apk update && apk add --no-cache git build-base docker-cli
 
-# Copy go.mod and go.sum to download dependencies first
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy the rest of the application
+# Copy the entire backend source code
 COPY . .
+
+# Initialize Go modules, creating a new go.mod file.
+# This makes the build self-contained and independent of local mod files.
+RUN go mod init backend
+
+# Tidy will find all dependencies in the source code and add them
+# to go.mod and go.sum, ensuring a consistent build.
+RUN go mod tidy
 
 # Build the Go application
 RUN go build -o main .
