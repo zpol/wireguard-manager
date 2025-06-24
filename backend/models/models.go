@@ -16,16 +16,17 @@ type User struct {
 
 type Server struct {
 	gorm.Model
-	Name        string `gorm:"not null"`
-	PublicKey   string `gorm:"not null"`
-	PrivateKey  string `gorm:"not null"`
-	ListenPort  int    `gorm:"not null"`
-	Address     string `gorm:"not null"`
-	DNS         string
-	MTU         int    `gorm:"default:1420"`
-	ConfigPath  string `gorm:"not null"`
-	LastSync    time.Time
-	Peers       []Peer
+	Name          string `gorm:"not null"`
+	ContainerName string `gorm:"uniqueIndex"`
+	PublicKey     string `gorm:"not null"`
+	PrivateKey    string `gorm:"not null"`
+	ListenPort    int    `gorm:"not null"`
+	Address       string `gorm:"not null"`
+	DNS           string
+	MTU           int    `gorm:"default:1420"`
+	ConfigPath    string `gorm:"not null"`
+	LastSync      time.Time
+	Peers         []Peer
 }
 
 type Peer struct {

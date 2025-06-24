@@ -3,13 +3,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    sysctls:
-      - net.ipv4.ip_forward=1
-      - net.ipv4.conf.all.src_valid_mark=1
-    privileged: true
     ports:
       - "8080:8080"
     environment:
@@ -22,7 +15,9 @@ services:
       - WG_PUBLIC_IP=${WG_PUBLIC_IP}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
     volumes:
-      # - ./backend:/app
+      # Mount the Docker socket to allow the backend to manage other containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # This volume will now be used by the WireGuard containers, but the backend needs access to read peer configs.
       - wireguard_config:/etc/wireguard
     depends_on:
       postgres:

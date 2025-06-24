@@ -1,34 +1,25 @@
-FROM golang:1.21-alpine3.19
+# Use a Golang image
+FROM golang:1.21-alpine
 
-
-# RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-# Install required packages
-RUN apk update
-RUN apk add --no-cache \
-    wireguard-tools \
-    libqrencode-tools \
-    git \
-    iptables
-
-# Set working directory
+# Set the working directory
 WORKDIR /app
 
-# Copy go mod file
-COPY go.mod ./
+# Install dependencies needed for the application
+# - wireguard-tools and iptables are no longer needed in this container
+# - Add docker-cli to manage other containers
+RUN apk update && apk add --no-cache git build-base docker-cli
 
-# Download dependencies
+# Copy go.mod and go.sum to download dependencies first
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
+# Copy the rest of the application
 COPY . .
 
-# Build the application
+# Build the Go application
 RUN go build -o main .
 
-# Create WireGuard config directory
-RUN mkdir -p /etc/wireguard
-
-# Expose port
+# Expose the port the app runs on
 EXPOSE 8080
 
 # Run the application
