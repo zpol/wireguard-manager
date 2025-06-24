@@ -338,7 +338,7 @@ func createServer(c *gin.Context) {
 		Address:    input.Address,
 		DNS:        input.DNS,
 		MTU:        input.MTU,
-		ConfigPath: input.ConfigPath,
+		ConfigPath: strings.TrimSuffix(input.ConfigPath, ".conf"),
 	}
 	log.Printf("[DEBUG] About to insert server: %+v\n", server)
 	if err := db.Create(&server).Error; err != nil {
