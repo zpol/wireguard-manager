@@ -26,6 +26,7 @@ import {
   Add as AddIcon,
   QrCode as QrCodeIcon,
   Download as DownloadIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -38,6 +39,7 @@ interface Peer {
   allowedIPs: string;
   serverID: number;
   status: string;
+  tags?: string;
 }
 
 interface Server {
@@ -56,11 +58,16 @@ const Peers: React.FC = () => {
   const [newPeer, setNewPeer] = useState<Partial<Peer>>({
     name: '',
     serverID: 0,
+    tags: '',
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [editPeer, setEditPeer] = useState<Peer | null>(null);
+  const [editTags, setEditTags] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const fetchPeers = async () => {
     try {
@@ -105,6 +112,7 @@ const Peers: React.FC = () => {
       const peerData = {
         name: newPeer.name,
         serverID: newPeer.serverID,
+        tags: newPeer.tags,
       };
 
       await axios.post(`${process.env.REACT_APP_API_URL}/api/peers`, peerData);
@@ -113,6 +121,7 @@ const Peers: React.FC = () => {
       setNewPeer({
         name: '',
         serverID: 0,
+        tags: '',
       });
       fetchPeers();
     } catch (error: any) {
@@ -164,6 +173,33 @@ const Peers: React.FC = () => {
     }
   };
 
+  const handleOpenEdit = (peer: Peer) => {
+    setEditPeer(peer);
+    setEditTags(peer.tags || '');
+    setEditError(null);
+  };
+
+  const handleCloseEdit = () => {
+    setEditPeer(null);
+    setEditTags('');
+    setEditError(null);
+  };
+
+  const handleUpdateTags = async () => {
+    if (!editPeer) return;
+    setEditLoading(true);
+    setEditError(null);
+    try {
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/peers/${editPeer.id}`, { tags: editTags });
+      handleCloseEdit();
+      fetchPeers();
+    } catch (error: any) {
+      setEditError(error.response?.data?.error || error.message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -207,6 +243,7 @@ const Peers: React.FC = () => {
               <TableCell>Address</TableCell>
               <TableCell>DNS</TableCell>
               <TableCell>Allowed IPs</TableCell>
+              <TableCell>Tags</TableCell>
               <TableCell>Server</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Actions</TableCell>
@@ -233,6 +270,7 @@ const Peers: React.FC = () => {
                     <TableCell>{peer.address}</TableCell>
                     <TableCell>{peer.dns}</TableCell>
                     <TableCell>{peer.allowedIPs}</TableCell>
+                    <TableCell>{peer.tags || '-'}</TableCell>
                     <TableCell>{server ? server.name : 'Unknown'}</TableCell>
                     <TableCell>
                       <Typography variant="body2" color={peer.status === 'active' ? 'success.main' : 'text.secondary'}>
@@ -248,6 +286,9 @@ const Peers: React.FC = () => {
                       </IconButton>
                       <IconButton color="error" onClick={() => handleDeletePeer(peer.id)}>
                         <DeleteIcon />
+                      </IconButton>
+                      <IconButton color="primary" onClick={() => handleOpenEdit(peer)}>
+                        <EditIcon />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -288,6 +329,14 @@ const Peers: React.FC = () => {
               </MenuItem>
             ))}
           </TextField>
+          <TextField
+            margin="dense"
+            label="Tags"
+            fullWidth
+            value={newPeer.tags}
+            onChange={(e) => setNewPeer({ ...newPeer, tags: e.target.value })}
+            helperText="Comma-separated tags (e.g., soporte,cliente,VPN)"
+          />
           {createError && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {createError}
@@ -318,6 +367,32 @@ const Peers: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setQrCodeOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!editPeer} onClose={handleCloseEdit} maxWidth="xs" fullWidth>
+        <DialogTitle>Edit Tags</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Tags"
+            fullWidth
+            value={editTags}
+            onChange={(e) => setEditTags(e.target.value)}
+            helperText="Comma-separated tags (e.g., soporte,cliente,VPN)"
+          />
+          {editError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {editError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseEdit} disabled={editLoading}>Cancel</Button>
+          <Button onClick={handleUpdateTags} variant="contained" disabled={editLoading}>
+            {editLoading ? 'Saving...' : 'Save'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

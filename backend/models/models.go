@@ -43,4 +43,5 @@ type Peer struct {
 	TransferRx  int64
 	TransferTx  int64
 	Status      string `gorm:"default:'active'"`
+	Tags        string `gorm:"type:text"`
 }
