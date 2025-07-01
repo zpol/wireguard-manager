@@ -1197,6 +1197,17 @@ func restartServerContainer(server *models.Server) error {
 	}
 	hostPathForServer := filepath.Join(hostConfigsPath, server.Name)
 
+	// Generar claves si no se reciben
+	if server.PrivateKey == "" || server.PublicKey == "" {
+		key, err := wgtypes.GeneratePrivateKey()
+		if err != nil {
+			log.Println("[ERROR] No se pudo generar la clave privada de WireGuard:", err)
+			return fmt.Errorf("No se pudo generar la clave privada de WireGuard")
+		}
+		server.PrivateKey = key.String()
+		server.PublicKey = key.PublicKey().String()
+	}
+
 	cmd := exec.Command("docker", "run", "-d",
 		"--name="+server.ContainerName,
 		"--cap-add=NET_ADMIN",
