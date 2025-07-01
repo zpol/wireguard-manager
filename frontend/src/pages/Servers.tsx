@@ -18,6 +18,8 @@ import {
   IconButton,
   Chip,
   Tooltip,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -59,6 +61,7 @@ const Servers: React.FC = () => {
     try {
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/servers`);
       setServers(response.data || []);
+      setError(null);
     } catch (err) {
       console.error('Failed to fetch servers:', err);
       setError('Could not fetch servers.');
@@ -75,18 +78,23 @@ const Servers: React.FC = () => {
     setCreateLoading(true);
     setCreateError(null);
     try {
-      const keysResponse = await axios.post(`${process.env.REACT_APP_API_URL}/api/wg/genkeys`);
-      const { privateKey, publicKey } = keysResponse.data;
-
+      // The backend now handles key generation automatically
       const serverData = {
         ...newServer,
-        publicKey,
-        privateKey,
         initialPeers: newServer.initialPeers,
       };
 
       await axios.post(`${process.env.REACT_APP_API_URL}/api/servers`, serverData);
       setOpen(false);
+      // Reset form
+      setNewServer({
+        name: 'wg0',
+        listenPort: 51820,
+        address: '10.0.0.1/24',
+        dns: '8.8.8.8',
+        mtu: 1420,
+        initialPeers: 1,
+      });
       fetchServers();
     } catch (error: any) {
       setCreateError(error.response?.data?.error || error.message);
@@ -99,15 +107,14 @@ const Servers: React.FC = () => {
     try {
         await axios.post(`${process.env.REACT_APP_API_URL}/api/servers/${id}/${action}`);
         // Refresh server list to show new status
-        setTimeout(fetchServers, 500); // Give a bit of time for the interface to update
+        setTimeout(fetchServers, 1000); // Give more time for container operations
     } catch (error: any) {
         alert(`Error performing action ${action}: ` + (error.response?.data?.error || error.message));
     }
   }, [fetchServers]);
 
-
   const handleDeleteServer = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this server?')) {
+    if (window.confirm('Are you sure you want to delete this server? This will also delete the associated Docker container and all peers.')) {
       try {
         await axios.delete(`${process.env.REACT_APP_API_URL}/api/servers/${id}`);
         fetchServers();
@@ -117,6 +124,14 @@ const Servers: React.FC = () => {
     }
   };
   
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -126,20 +141,33 @@ const Servers: React.FC = () => {
         </Button>
       </Box>
 
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Status</TableCell>
+              <TableCell>Name</TableCell>
+              <TableCell>Listen Port</TableCell>
+              <TableCell>Address</TableCell>
+              <TableCell>Peers</TableCell>
+              <TableCell sx={{ width: '40%' }}>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {servers.length === 0 ? (
               <TableRow>
-                <TableCell>Status</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Listen Port</TableCell>
-                <TableCell>Address</TableCell>
-                <TableCell>Peers</TableCell>
-                <TableCell sx={{ width: '40%' }}>Actions</TableCell>
+                <TableCell colSpan={6} align="center">
+                  No servers found. Create your first WireGuard server to get started.
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {servers.map((server) => (
+            ) : (
+              servers.map((server) => (
                 <TableRow key={server.id}>
                   <TableCell>
                     <Chip
@@ -181,21 +209,26 @@ const Servers: React.FC = () => {
                     </Tooltip>
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
       
-      <Dialog open={open} onClose={() => { setOpen(false); setCreateError(null); }}>
-        <DialogTitle>Add New Server</DialogTitle>
+      <Dialog open={open} onClose={() => { setOpen(false); setCreateError(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>Add New WireGuard Server</DialogTitle>
         <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Create a new WireGuard server. The system will automatically generate keys and create a Docker container.
+          </Typography>
           <TextField
             autoFocus
             margin="dense"
-            label="Name"
+            label="Server Name"
             fullWidth
             value={newServer.name}
             onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
+            helperText="Unique name for this server"
           />
           <TextField
             margin="dense"
@@ -206,20 +239,23 @@ const Servers: React.FC = () => {
             onChange={(e) =>
               setNewServer({ ...newServer, listenPort: parseInt(e.target.value) })
             }
+            helperText="UDP port for WireGuard (default: 51820)"
           />
           <TextField
             margin="dense"
-            label="Address"
+            label="Server Address"
             fullWidth
             value={newServer.address}
             onChange={(e) => setNewServer({ ...newServer, address: e.target.value })}
+            helperText="Server IP in CIDR notation (e.g., 10.0.0.1/24)"
           />
           <TextField
             margin="dense"
-            label="DNS"
+            label="DNS Server"
             fullWidth
             value={newServer.dns}
             onChange={(e) => setNewServer({ ...newServer, dns: e.target.value })}
+            helperText="DNS server for clients (e.g., 8.8.8.8)"
           />
           <TextField
             margin="dense"
@@ -230,6 +266,7 @@ const Servers: React.FC = () => {
             onChange={(e) =>
               setNewServer({ ...newServer, mtu: parseInt(e.target.value) })
             }
+            helperText="Maximum Transmission Unit (default: 1420)"
           />
           <TextField
             margin="dense"
@@ -240,17 +277,20 @@ const Servers: React.FC = () => {
             onChange={(e) =>
               setNewServer({ ...newServer, initialPeers: parseInt(e.target.value) })
             }
+            helperText="Number of peers to create automatically (0-10)"
           />
           {createError && (
-            <Typography color="error" sx={{ mt: 1, mb: 1 }}>
+            <Alert severity="error" sx={{ mt: 2 }}>
               {createError}
-            </Typography>
+            </Alert>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setOpen(false); setCreateError(null); }} disabled={createLoading}>Cancel</Button>
+          <Button onClick={() => { setOpen(false); setCreateError(null); }} disabled={createLoading}>
+            Cancel
+          </Button>
           <Button onClick={handleCreateServer} variant="contained" disabled={createLoading}>
-            {createLoading ? 'Creating...' : 'Create'}
+            {createLoading ? 'Creating...' : 'Create Server'}
           </Button>
         </DialogActions>
       </Dialog>

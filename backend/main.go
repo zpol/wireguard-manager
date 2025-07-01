@@ -1066,26 +1066,165 @@ func getStats(c *gin.Context) {
 }
 
 func startServer(c *gin.Context) {
-	// Implementation of startServer function
-	c.JSON(http.StatusOK, gin.H{"message": "Start server endpoint not implemented yet"})
+	id := c.Param("id")
+	var server models.Server
+	if err := db.First(&server, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	if server.ContainerName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server has no associated container"})
+		return
+	}
+
+	// Start the container in the background
+	go func() {
+		cmd := exec.Command("docker", "start", server.ContainerName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR] Failed to start container %s: %v, Output: %s", server.ContainerName, err, string(out))
+		} else {
+			log.Printf("[INFO] Container %s started successfully", server.ContainerName)
+		}
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"message": "Starting server container"})
 }
 
 func stopServer(c *gin.Context) {
-	// Implementation of stopServer function
-	c.JSON(http.StatusOK, gin.H{"message": "Stop server endpoint not implemented yet"})
+	id := c.Param("id")
+	var server models.Server
+	if err := db.First(&server, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	if server.ContainerName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server has no associated container"})
+		return
+	}
+
+	// Stop the container in the background
+	go func() {
+		cmd := exec.Command("docker", "stop", server.ContainerName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR] Failed to stop container %s: %v, Output: %s", server.ContainerName, err, string(out))
+		} else {
+			log.Printf("[INFO] Container %s stopped successfully", server.ContainerName)
+		}
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"message": "Stopping server container"})
 }
 
 func restartServer(c *gin.Context) {
-	// Implementation of restartServer function
-	c.JSON(http.StatusOK, gin.H{"message": "Restart server endpoint not implemented yet"})
+	id := c.Param("id")
+	var server models.Server
+	if err := db.Preload("Peers").First(&server, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Restart the container in the background
+	go func() {
+		if err := restartServerContainer(&server); err != nil {
+			log.Printf("[ERROR] Failed to restart server container: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"message": "Restarting server container"})
 }
 
 func getServerStatus(c *gin.Context) {
-	// Implementation of getServerStatus function
-	c.JSON(http.StatusOK, gin.H{"message": "Get server status endpoint not implemented yet"})
+	id := c.Param("id")
+	var server models.Server
+	if err := db.First(&server, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	if server.ContainerName == "" {
+		c.JSON(http.StatusOK, gin.H{"status": "inactive", "message": "No container associated"})
+		return
+	}
+
+	// Check container status
+	cmd := exec.Command("docker", "inspect", "--format={{.State.Status}}", server.ContainerName)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "inactive", "message": "Container not found"})
+		return
+	}
+
+	status := strings.TrimSpace(string(out))
+	if status == "running" {
+		c.JSON(http.StatusOK, gin.H{"status": "active"})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"status": "inactive", "message": status})
+	}
 }
 
 func restartServerContainer(server *models.Server) error {
-	// Implementation of restartServerContainer function
-	return fmt.Errorf("restartServerContainer function not implemented")
+	if server.ContainerName == "" {
+		return fmt.Errorf("server has no container name")
+	}
+
+	// Stop the container
+	stopCmd := exec.Command("docker", "stop", server.ContainerName)
+	if out, err := stopCmd.CombinedOutput(); err != nil {
+		log.Printf("[WARNING] Could not stop container %s: %v, Output: %s", server.ContainerName, err, string(out))
+		// Continue anyway, the container might not be running
+	}
+
+	// Remove the container
+	rmCmd := exec.Command("docker", "rm", server.ContainerName)
+	if out, err := rmCmd.CombinedOutput(); err != nil {
+		log.Printf("[WARNING] Could not remove container %s: %v, Output: %s", server.ContainerName, err, string(out))
+		// Continue anyway, the container might not exist
+	}
+
+	// Start a new container with updated peer count
+	publicIP := getEnv("WG_PUBLIC_IP", "")
+	if publicIP == "" {
+		return fmt.Errorf("WG_PUBLIC_IP not set, cannot restart container")
+	}
+
+	hostConfigsPath := getEnv("HOST_WG_CONFIGS_PATH", "")
+	if hostConfigsPath == "" {
+		return fmt.Errorf("HOST_WG_CONFIGS_PATH is not set, cannot mount config volume")
+	}
+	hostPathForServer := filepath.Join(hostConfigsPath, server.Name)
+
+	cmd := exec.Command("docker", "run", "-d",
+		"--name="+server.ContainerName,
+		"--cap-add=NET_ADMIN",
+		"--cap-add=SYS_MODULE",
+		"-p", fmt.Sprintf("%d:51820/udp", server.ListenPort),
+		"-e", "PUID=1000",
+		"-e", "PGID=1000",
+		"-e", "TZ=Etc/UTC",
+		"-e", "SERVERURL="+publicIP,
+		"-e", "SERVERPORT="+strconv.Itoa(server.ListenPort),
+		"-e", "PEERS="+strconv.Itoa(len(server.Peers)),
+		"-e", "PEERDNS=auto",
+		"-e", "INTERNAL_SUBNET="+server.Address,
+		"-e", "ALLOWEDIPS=0.0.0.0/0",
+		"-e", "LOG_CONFS=true",
+		"-v", hostPathForServer+":/config",
+		"-v", "/lib/modules:/lib/modules",
+		"--sysctl=net.ipv4.conf.all.src_valid_mark=1",
+		"--sysctl=net.ipv4.ip_forward=1",
+		"--restart=unless-stopped",
+		"lscr.io/linuxserver/wireguard:latest",
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to start container: %v, Output: %s", err, string(out))
+	}
+
+	log.Printf("[INFO] Container %s restarted successfully. Output: %s", server.ContainerName, string(out))
+	return nil
 }

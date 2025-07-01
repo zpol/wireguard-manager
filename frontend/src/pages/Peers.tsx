@@ -18,6 +18,8 @@ import {
   IconButton,
   MenuItem,
   DialogContentText,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -41,6 +43,7 @@ interface Peer {
 interface Server {
   id: number;
   name: string;
+  address: string;
 }
 
 const Peers: React.FC = () => {
@@ -52,11 +55,12 @@ const Peers: React.FC = () => {
   const [qrCode, setQrCode] = useState('');
   const [newPeer, setNewPeer] = useState<Partial<Peer>>({
     name: '',
-    address: '10.0.0.2/24',
-    dns: '8.8.8.8',
-    allowedIPs: '0.0.0.0/0',
+    serverID: 0,
   });
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const fetchPeers = async () => {
     try {
@@ -80,35 +84,41 @@ const Peers: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchPeers();
-    fetchServers();
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchPeers(), fetchServers()]);
+      setLoading(false);
+    };
+    loadData();
   }, []);
 
   const handleCreatePeer = async () => {
-    try {
-      // Generate keys first
-      const keysResponse = await axios.post(`${process.env.REACT_APP_API_URL}/api/wg/genkeys`);
-      const { privateKey, publicKey } = keysResponse.data;
+    if (!newPeer.name || !newPeer.serverID) {
+      setCreateError('Name and server are required');
+      return;
+    }
 
-      // Create peer with generated keys
+    setCreateLoading(true);
+    setCreateError(null);
+    try {
+      // The backend now handles key generation and IP allocation automatically
       const peerData = {
-        ...newPeer,
-        publicKey,
-        privateKey,
+        name: newPeer.name,
+        serverID: newPeer.serverID,
       };
 
       await axios.post(`${process.env.REACT_APP_API_URL}/api/peers`, peerData);
       setOpen(false);
-      fetchPeers();
+      // Reset form
       setNewPeer({
         name: '',
-        address: '10.0.0.2/24',
-        dns: '8.8.8.8',
-        allowedIPs: '0.0.0.0/0',
+        serverID: 0,
       });
+      fetchPeers();
     } catch (error: any) {
-      console.error('Failed to create peer:', error.response?.data || error.message);
-      alert('Error al crear peer: ' + (error.response?.data?.error || error.message));
+      setCreateError(error.response?.data?.error || error.message);
+    } finally {
+      setCreateLoading(false);
     }
   };
 
@@ -154,24 +164,39 @@ const Peers: React.FC = () => {
     }
   };
 
-  console.log('Valor de peers en render:', peers);
-
-  if (!Array.isArray(peers)) {
-    return <Typography color="error">Error crítico: peers no es un array. Valor: {JSON.stringify(peers)}</Typography>;
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">WireGuard Peers</Typography>
+        <Typography variant="h4">WireGuard Peers ({peers.length})</Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => setOpen(true)}
+          disabled={servers.length === 0}
         >
           Add Peer
         </Button>
       </Box>
+
+      {servers.length === 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          No servers available. Please create a WireGuard server first before adding peers.
+        </Alert>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <TableContainer component={Paper}>
         <Table>
@@ -188,146 +213,107 @@ const Peers: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {error ? (
+            {peers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} align="center">
-                  {error}
+                  No peers found. Create your first peer to get started.
                 </TableCell>
               </TableRow>
-            ) : Array.isArray(peers) ? (
-              peers.length > 0 ? (
-                peers.map((peer) => {
-                  const server = servers.find(s => s.id === peer.serverID);
-                  return (
-                    <TableRow key={peer.id}>
-                      <TableCell>{peer.name}</TableCell>
-                      <TableCell>{peer.publicKey}</TableCell>
-                      <TableCell>{peer.address}</TableCell>
-                      <TableCell>{peer.dns}</TableCell>
-                      <TableCell>{peer.allowedIPs}</TableCell>
-                      <TableCell>{server ? server.name : '-'}</TableCell>
-                      <TableCell>{peer.status}</TableCell>
-                      <TableCell>
-                        <IconButton
-                          color="primary"
-                          onClick={() => handleShowQRCode(peer)}
-                        >
-                          <QrCodeIcon />
-                        </IconButton>
-                        <IconButton
-                          color="primary"
-                          onClick={() => handleDownloadConfig(peer)}
-                        >
-                          <DownloadIcon />
-                        </IconButton>
-                        <IconButton
-                          color="error"
-                          onClick={() => handleDeletePeer(peer.id)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={8} align="center">
-                    No hay peers configurados.
-                  </TableCell>
-                </TableRow>
-              )
             ) : (
-              <TableRow>
-                <TableCell colSpan={8} align="center">
-                  Error: Peers data is invalid.
-                </TableCell>
-              </TableRow>
+              peers.map((peer) => {
+                const server = servers.find(s => s.id === peer.serverID);
+                return (
+                  <TableRow key={peer.id}>
+                    <TableCell>{peer.name}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                        {peer.publicKey ? `${peer.publicKey.substring(0, 20)}...` : 'Not generated'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{peer.address}</TableCell>
+                    <TableCell>{peer.dns}</TableCell>
+                    <TableCell>{peer.allowedIPs}</TableCell>
+                    <TableCell>{server ? server.name : 'Unknown'}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color={peer.status === 'active' ? 'success.main' : 'text.secondary'}>
+                        {peer.status || 'unknown'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <IconButton onClick={() => handleShowQRCode(peer)}>
+                        <QrCodeIcon />
+                      </IconButton>
+                      <IconButton onClick={() => handleDownloadConfig(peer)}>
+                        <DownloadIcon />
+                      </IconButton>
+                      <IconButton color="error" onClick={() => handleDeletePeer(peer.id)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      <Dialog open={open} onClose={() => setOpen(false)}>
+      <Dialog open={open} onClose={() => { setOpen(false); setCreateError(null); }} maxWidth="sm" fullWidth>
         <DialogTitle>Add New Peer</DialogTitle>
         <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Create a new WireGuard peer. The system will automatically generate keys and assign an IP address.
+          </DialogContentText>
           <TextField
             autoFocus
             margin="dense"
-            name="name"
-            label="Name"
+            label="Peer Name"
             fullWidth
-            onChange={e => setNewPeer({ ...newPeer, name: e.target.value })}
+            value={newPeer.name}
+            onChange={(e) => setNewPeer({ ...newPeer, name: e.target.value })}
+            helperText="Unique name for this peer"
           />
           <TextField
             select
             margin="dense"
-            name="serverID"
             label="Server"
             fullWidth
-            onChange={e =>
-              setNewPeer({ ...newPeer, serverID: parseInt(e.target.value) })
-            }
-            value={newPeer.serverID || ''}
+            value={newPeer.serverID}
+            onChange={(e) => setNewPeer({ ...newPeer, serverID: parseInt(e.target.value) })}
+            helperText="Select the WireGuard server for this peer"
           >
-            {servers.map(server => (
+            {servers.map((server) => (
               <MenuItem key={server.id} value={server.id}>
-                {server.name}
+                {server.name} ({server.address})
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            margin="dense"
-            name="address"
-            label="Address"
-            fullWidth
-            value={newPeer.address}
-            onChange={(e) => setNewPeer({ ...newPeer, address: e.target.value })}
-          />
-          <TextField
-            margin="dense"
-            label="DNS"
-            fullWidth
-            value={newPeer.dns}
-            onChange={(e) => setNewPeer({ ...newPeer, dns: e.target.value })}
-          />
-          <TextField
-            margin="dense"
-            label="Allowed IPs"
-            fullWidth
-            value={newPeer.allowedIPs}
-            onChange={(e) =>
-              setNewPeer({ ...newPeer, allowedIPs: e.target.value })
-            }
-          />
+          {createError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {createError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreatePeer} variant="contained">
-            Create
+          <Button onClick={() => { setOpen(false); setCreateError(null); }} disabled={createLoading}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreatePeer} variant="contained" disabled={createLoading}>
+            {createLoading ? 'Creating...' : 'Create Peer'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={qrCodeOpen} onClose={() => setQrCodeOpen(false)}>
+      <Dialog open={qrCodeOpen} onClose={() => setQrCodeOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>QR Code for {selectedPeer?.name}</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            Scan this QR code with your WireGuard client to add this peer
-            configuration.
-          </DialogContentText>
-          {qrCode ? (
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                mt: 2,
-              }}
-            >
-              <img src={qrCode} alt={`QR Code for ${selectedPeer?.name}`} />
+          {qrCode && (
+            <Box sx={{ textAlign: 'center' }}>
+              <img src={qrCode} alt="QR Code" style={{ maxWidth: '100%', height: 'auto' }} />
+              <Typography variant="body2" sx={{ mt: 2 }}>
+                Scan this QR code with your WireGuard mobile app to quickly configure the peer.
+              </Typography>
             </Box>
-          ) : (
-            <Typography>Generating QR Code...</Typography>
           )}
         </DialogContent>
         <DialogActions>

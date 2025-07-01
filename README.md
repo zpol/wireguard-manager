@@ -1,243 +1,155 @@
 # WireGuard Manager
 
-A secure and modern web interface to manage WireGuard VPN servers and peers.
+A modern web-based management system for WireGuard VPN servers, built with Go backend and React frontend, using Docker containers for WireGuard instances.
 
-## 📸 Screenshots
+## Architecture
 
-### Dashboard
-![Dashboard](doc/images/dashboard.png)
+This system uses a containerized approach where:
+- **Backend**: Go API that manages WireGuard Docker containers
+- **Frontend**: React web interface for user management
+- **WireGuard**: Each server runs in its own Docker container using `linuxserver/wireguard`
+- **Database**: PostgreSQL for storing server and peer configurations
 
-### User Management
-![User Management](doc/images/users.png)
+## Features
 
-### Add Server
-![Add Server](doc/images/add-server.png)
+- **Containerized WireGuard**: Each server runs in its own Docker container
+- **User Management**: Multi-user system with role-based access
+- **QR Code Generation**: Easy mobile client configuration
+- **Dashboard**: Real-time statistics and traffic monitoring
+- **Auto-restart**: Containers automatically restart when peers are added/removed
+- **Web Interface**: Modern React-based UI
 
-### Add Peers
-![Add Peers](doc/images/add-peers.png)
+## Prerequisites
 
-## 🚀 Main Features
-
-### ✅ User Management
-- Create, edit, and delete users
-- User roles (admin/user)
-- Secure JWT authentication
-- Password change
-- Default admin user
-
-### ✅ WireGuard Server Management
-- Create and configure WireGuard servers
-- Automatic public/private key generation
-- Port and IP address configuration
-- Configuration file management
-
-### ✅ Peer (Client) Management
-- Create and manage WireGuard peers
-- QR code generation for quick setup
-- Download configuration files
-- Assign IPs and DNS
-
-### ✅ WireGuard Operations
-- Start/Stop/Restart WireGuard services
-- View connection status
-- Auto-generate configurations
-
-## 🔧 Quick Installation
-
-### Prerequisites
 - Docker and Docker Compose
-- WireGuard kernel module installed on the host
-- Port 51820/UDP available for WireGuard
-- Ports 3000 and 8080 available for the web interface
+- Linux host with kernel modules support
+- Public IP address for the server
 
-### Automatic Start
-```bash
-# Clone the repository
-git clone <repository-url>
-cd wireguard-manager
+## Quick Start
 
-# Run the initialization script
-./init.sh
-```
-
-### Manual Start
-```bash
-# 1. Configure environment variables
-cp .env.example .env
-# Edit .env with your settings
-
-# 2. Start services
-docker-compose up -d
-
-# 3. Access the application
-# URL: http://localhost:3000
-# User: admin
-# Password: admin
-```
-
-## 🔑 Default Credentials
-
-- **User**: `admin`
-- **Password**: `admin`
-
-**⚠️ IMPORTANT**: Change the admin password immediately after the first login.
-
-## 🛠️ Useful Commands
-
-### Service Management
-```bash
-# View real-time logs
-docker-compose logs -f
-
-# View logs for a specific service
-docker-compose logs backend
-docker-compose logs frontend
-docker-compose logs postgres
-
-# Restart services
-docker-compose restart
-
-# Stop services
-docker-compose down
-
-# Rebuild and restart
-docker-compose up --build -d
-```
-
-### API Testing
-```bash
-# Run all tests
-./test-api.sh
-```
-
-### Backup and Restore
-```bash
-# Database backup
-docker-compose exec postgres pg_dump -U wireguard wireguard > backup.sql
-
-# Restore database
-docker-compose exec -T postgres psql -U wireguard wireguard < backup.sql
-```
-
-## 🔒 Security Configuration
-
-### Environment Variables (.env)
-```bash
-# Database
-DB_PASSWORD=your_secure_password
-
-# JWT
-JWT_SECRET=your_very_long_secret_key
-
-# WireGuard
-WIREGUARD_CONFIG_PATH=/etc/wireguard
-
-# API
-REACT_APP_API_URL=http://localhost:8080
-
-# Security
-ENABLE_HTTPS=false  # true in production
-ALLOW_REGISTRATION=true
-SESSION_TIMEOUT=60
-```
-
-### Ports Used
-- **3000**: Frontend (React)
-- **8080**: Backend API (Go)
-- **5432**: PostgreSQL (development only)
-- **51820**: WireGuard VPN (UDP)
-
-## 🏗️ Architecture
-
-### Backend (Go)
-- **Framework**: Gin
-- **Database**: PostgreSQL with GORM
-- **Authentication**: JWT
-- **Tools**: WireGuard CLI
-
-### Frontend (React)
-- **Framework**: React with TypeScript
-- **UI**: Material-UI
-- **State**: Context API
-- **HTTP**: Axios
-
-### Database
-- **System**: PostgreSQL
-- **Migration**: Automatic with GORM
-- **Persistence**: Docker volume
-
-## 🔍 Troubleshooting
-
-### Common Issues
-
-1. **Database connection error**
+1. **Clone the repository**:
    ```bash
-   docker-compose logs postgres
-   docker-compose restart
+   git clone <repository-url>
+   cd wireguard-manager
    ```
 
-2. **Frontend not loading**
+2. **Create environment file**:
    ```bash
-   docker-compose logs frontend
-   curl http://localhost:8080/api/wg/status
+   cp .env.example .env
    ```
 
-3. **Cannot create users**
+3. **Configure environment variables** in `.env`:
    ```bash
-   docker-compose logs backend | grep DEBUG
+   # Database
+   DB_PASSWORD=your_secure_password
+   
+   # JWT Secret (generate a random string)
+   JWT_SECRET=your_jwt_secret_here
+   
+   # Admin password
+   DEFAULT_ADMIN_PASSWORD=admin123
+   
+   # Your server's public IP
+   WG_PUBLIC_IP=your.public.ip.address
+   
+   # Frontend API URL
+   REACT_APP_API_URL=http://localhost:8080
    ```
 
-### Debug Logs
+4. **Start the system**:
+   ```bash
+   docker-compose up -d
+   ```
+
+5. **Access the web interface**:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8080
+   - Default login: `admin` / `admin123` (or your configured password)
+
+## Environment Variables
+
+### Backend (.env)
+- `DB_PASSWORD`: PostgreSQL database password
+- `JWT_SECRET`: Secret key for JWT token generation
+- `DEFAULT_ADMIN_PASSWORD`: Initial admin user password
+- `WG_PUBLIC_IP`: Your server's public IP address
+- `HOST_WG_CONFIGS_PATH`: Host path for WireGuard configs (auto-set)
+
+### Frontend (Docker build arg)
+- `REACT_APP_API_URL`: Backend API URL
+
+## Usage
+
+### Creating a WireGuard Server
+
+1. Log in to the web interface
+2. Go to "Servers" page
+3. Click "Add Server"
+4. Fill in the details:
+   - **Name**: Unique server name
+   - **Listen Port**: UDP port (default: 51820)
+   - **Address**: Server IP in CIDR notation (e.g., 10.0.0.1/24)
+   - **DNS**: DNS server for clients (e.g., 8.8.8.8)
+   - **MTU**: Maximum Transmission Unit (default: 1420)
+   - **Initial Peers**: Number of peers to create automatically
+
+5. Click "Create Server"
+
+The system will:
+- Generate WireGuard keys automatically
+- Create a Docker container with the `linuxserver/wireguard` image
+- Set up the initial peers if specified
+- Start the container
+
+### Managing Peers
+
+1. Go to "Peers" page
+2. Click "Add Peer"
+3. Select the server and provide a name
+4. The system will:
+   - Generate peer keys automatically
+   - Assign an IP address from the server's subnet
+   - Update the WireGuard container configuration
+
+### Downloading Configurations
+
+- **QR Code**: Click the QR code icon to display a QR code for mobile apps
+- **Config File**: Click the download icon to download the `.conf` file
+
+## Container Management
+
+The system automatically manages WireGuard containers:
+
+- **Start/Stop**: Use the action buttons in the Servers page
+- **Auto-restart**: Containers restart automatically when peers are added/removed
+- **Configuration**: All configs are stored in mounted volumes
+
+## Security Considerations
+
+1. **Change default passwords**: Update the admin password after first login
+2. **Firewall**: Ensure only necessary ports are open (3000, 8080, 5432, and your WireGuard ports)
+3. **HTTPS**: Use a reverse proxy with SSL for production
+4. **Network isolation**: Consider running in a private network
+
+## Troubleshooting
+
+### Container Issues
 ```bash
-# View detailed logs
-docker-compose logs backend | grep DEBUG
+# Check container status
+docker ps -a
 
-# View errors
-docker-compose logs backend | grep ERROR
+# View container logs
+docker logs <container-name>
+
+# Restart a container
+docker restart <container-name>
 ```
 
-## 📊 Monitoring
+### Network Issues
+```bash
+# Check if ports are open
+netstat -tulpn | grep :51820
 
-### Available Metrics
-- WireGuard connection status
-- Number of active peers
-- Data transfer per peer
-- Server uptime
-
-### Important Logs
-- User authentication
-- Configuration creation/modification
-- WireGuard errors
-- Failed access attempts
-
-## 🚀 Upcoming Improvements
-
-### Planned Features
-- [ ] Dashboard with real-time metrics
-- [ ] Email notifications
-- [ ] Full REST API
-- [ ] LDAP/Active Directory integration
-- [ ] Automatic backup
-- [ ] Advanced monitoring
-- [ ] Responsive mobile interface
-
-### Security Enhancements
-- [ ] Two-factor authentication
-- [ ] Rate limiting
-- [ ] Full audit
-- [ ] Configuration encryption
-
-## 📞 Support
-
-For technical support:
-- Check logs: `docker-compose logs`
-- Check status: `docker-compose ps`
-- Run tests: `./test-api.sh`
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-**WireGuard Manager** - A complete solution to securely and efficiently manage WireGuard VPN servers. 
+# Check iptables rules
+sudo iptables -L -n -v
+```

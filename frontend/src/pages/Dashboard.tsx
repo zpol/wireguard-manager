@@ -5,6 +5,7 @@ import {
   Paper,
   Typography,
   CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Storage as ServerIcon,
@@ -21,6 +22,19 @@ interface Stats {
     rx: number;
     tx: number;
   };
+  servers?: Array<{
+    id: number;
+    name: string;
+    rx: number;
+    tx: number;
+  }>;
+  peers?: Array<{
+    id: number;
+    name: string;
+    serverID: number;
+    rx: number;
+    tx: number;
+  }>;
 }
 
 const Dashboard: React.FC = () => {
@@ -31,6 +45,7 @@ const Dashboard: React.FC = () => {
     traffic: { rx: 0, tx: 0 }
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -38,6 +53,8 @@ const Dashboard: React.FC = () => {
 
   const fetchStats = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/stats`);
       setStats({
         totalServers: response.data.totalServers ?? 0,
@@ -47,9 +64,12 @@ const Dashboard: React.FC = () => {
           rx: response.data.traffic?.rx ?? 0,
           tx: response.data.traffic?.tx ?? 0,
         },
+        servers: response.data.servers || [],
+        peers: response.data.peers || [],
       });
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+      setError('Failed to load dashboard statistics');
     } finally {
       setLoading(false);
     }
@@ -57,7 +77,7 @@ const Dashboard: React.FC = () => {
 
   const formatBytes = (bytes: number) => {
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    if (bytes === 0) return '0 Byte';
+    if (bytes === 0) return '0 Bytes';
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${Math.round(bytes / Math.pow(1024, i))} ${sizes[i]}`;
   };
@@ -69,7 +89,7 @@ const Dashboard: React.FC = () => {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          height: '100vh',
+          height: '50vh',
         }}
       >
         <CircularProgress />
@@ -82,6 +102,12 @@ const Dashboard: React.FC = () => {
       <Typography variant="h4" sx={{ mb: 4 }}>
         Dashboard
       </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
 
       <Grid container spacing={3}>
         <Grid item xs={12} sm={6} md={3}>
@@ -149,6 +175,63 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Server Traffic Details */}
+      {stats.servers && stats.servers.length > 0 && (
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="h5" sx={{ mb: 2 }}>
+            Server Traffic
+          </Typography>
+          <Grid container spacing={2}>
+            {stats.servers.map((server) => (
+              <Grid item xs={12} sm={6} md={4} key={server.id}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    {server.name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Upload: {formatBytes(server.tx)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Download: {formatBytes(server.rx)}
+                  </Typography>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
+      {/* Peer Traffic Details */}
+      {stats.peers && stats.peers.length > 0 && (
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="h5" sx={{ mb: 2 }}>
+            Peer Traffic
+          </Typography>
+          <Grid container spacing={2}>
+            {stats.peers.slice(0, 6).map((peer) => (
+              <Grid item xs={12} sm={6} md={4} key={peer.id}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    {peer.name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Upload: {formatBytes(peer.tx)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Download: {formatBytes(peer.rx)}
+                  </Typography>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+          {stats.peers.length > 6 && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Showing first 6 peers. View all peers in the Peers section.
+            </Typography>
+          )}
+        </Box>
+      )}
     </Box>
   );
 };
