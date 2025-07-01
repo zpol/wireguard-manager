@@ -300,8 +300,8 @@ func createServer(c *gin.Context) {
 	log.Println("[DEBUG] createServer called")
 	type ServerInput struct {
 		Name       string `json:"name" binding:"required"`
-		PublicKey  string `json:"publicKey" binding:"required"`
-		PrivateKey string `json:"privateKey" binding:"required"`
+		PublicKey  string `json:"publicKey"`
+		PrivateKey string `json:"privateKey"`
 		ListenPort int    `json:"listenPort" binding:"required"`
 		Address    string `json:"address" binding:"required"`
 		DNS        string `json:"dns"`
