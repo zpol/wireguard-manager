@@ -2,6 +2,9 @@
 
 A modern web-based management system for WireGuard VPN servers, built with Go backend and React frontend, using Docker containers for WireGuard instances.
 
+# Demo 
+<video src="doc/images/demo.mp4" controls></video>
+
 ## Architecture
 
 This system uses a containerized approach where:
