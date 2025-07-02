@@ -20,6 +20,8 @@ import {
   DialogContentText,
   Alert,
   CircularProgress,
+  Chip,
+  Stack,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -27,6 +29,7 @@ import {
   QrCode as QrCodeIcon,
   Download as DownloadIcon,
   Edit as EditIcon,
+  LabelOutlined as LabelIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -270,7 +273,31 @@ const Peers: React.FC = () => {
                     <TableCell>{peer.address}</TableCell>
                     <TableCell>{peer.dns}</TableCell>
                     <TableCell>{peer.allowedIPs}</TableCell>
-                    <TableCell>{peer.tags || '-'}</TableCell>
+                    <TableCell>
+                      {peer.tags && peer.tags.trim() !== '' ? (
+                        <Stack direction="row" spacing={0.5}>
+                          {peer.tags.split(',').map((tag, idx) => (
+                            <Chip
+                              key={idx}
+                              icon={<LabelIcon sx={{ color: '#b388ff' }} />}
+                              label={tag.trim()}
+                              size="small"
+                              sx={{
+                                backgroundColor: '#ede7f6',
+                                color: '#6a1b9a',
+                                fontWeight: 500,
+                                borderRadius: '6px',
+                                border: 'none',
+                                px: 0.5,
+                                fontSize: '0.85em',
+                              }}
+                            />
+                          ))}
+                        </Stack>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
                     <TableCell>{server ? server.name : 'Unknown'}</TableCell>
                     <TableCell>
                       <Typography variant="body2" color={peer.status === 'active' ? 'success.main' : 'text.secondary'}>
