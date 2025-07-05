@@ -55,6 +55,10 @@ This system uses a containerized approach where:
    # Your server's public IP
    WG_PUBLIC_IP=your.public.ip.address
    
+   # Your server's FQDN (optional, for DNS round-robin HA setups)
+   # If set, this will be used instead of WG_PUBLIC_IP in peer configs
+   WG_FQDN=your.vpn.domain.com
+   
    # Frontend API URL
    REACT_APP_API_URL=http://localhost:8080
    ```
@@ -76,10 +80,28 @@ This system uses a containerized approach where:
 - `JWT_SECRET`: Secret key for JWT token generation
 - `DEFAULT_ADMIN_PASSWORD`: Initial admin user password
 - `WG_PUBLIC_IP`: Your server's public IP address
+- `WG_FQDN`: Your server's FQDN (optional, for DNS round-robin HA setups)
 - `HOST_WG_CONFIGS_PATH`: Host path for WireGuard configs (auto-set)
 
 ### Frontend (Docker build arg)
 - `REACT_APP_API_URL`: Backend API URL
+
+## High Availability (HA) Setup
+
+For DNS round-robin high availability setups:
+
+1. **Configure DNS**: Set up your domain with multiple A records pointing to different server IPs
+2. **Set WG_FQDN**: Configure the `WG_FQDN` environment variable with your domain
+3. **Deploy multiple instances**: Each server will use the FQDN in peer configurations
+
+Example DNS configuration:
+```
+vpn.yourdomain.com.    IN  A   192.168.1.10
+vpn.yourdomain.com.    IN  A   192.168.1.11
+vpn.yourdomain.com.    IN  A   192.168.1.12
+```
+
+When `WG_FQDN=vpn.yourdomain.com` is set, all peer configurations will use this domain instead of individual IP addresses, enabling automatic failover through DNS round-robin.
 
 ## Usage
 

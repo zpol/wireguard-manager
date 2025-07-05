@@ -36,6 +36,15 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+// Función para obtener el endpoint del servidor (FQDN o IP)
+func getServerEndpoint() string {
+	fqdn := getEnv("WG_FQDN", "")
+	if fqdn != "" {
+		return fqdn
+	}
+	return getEnv("WG_PUBLIC_IP", "")
+}
+
 func waitForDatabase() error {
 	dsn := "host=" + os.Getenv("DB_HOST") +
 		" user=" + os.Getenv("DB_USER") +
@@ -745,6 +754,25 @@ func getPeerQRCode(c *gin.Context) {
 	}
 	config := string(configBytes)
 
+	// Reemplazar la IP del servidor con el FQDN si está configurado
+	serverEndpoint := getServerEndpoint()
+	if serverEndpoint != "" {
+		// Buscar y reemplazar la línea Endpoint en la configuración
+		lines := strings.Split(config, "\n")
+		for i, line := range lines {
+			if strings.HasPrefix(line, "Endpoint = ") {
+				// Extraer el puerto de la línea actual
+				parts := strings.Split(line, ":")
+				if len(parts) >= 2 {
+					port := parts[len(parts)-1]
+					lines[i] = fmt.Sprintf("Endpoint = %s:%s", serverEndpoint, port)
+				}
+				break
+			}
+		}
+		config = strings.Join(lines, "\n")
+	}
+
 	// Generate QR code PNG using qrencode
 	cmd := exec.Command("qrencode", "-o", "-", "-t", "PNG")
 	cmd.Stdin = strings.NewReader(config)
@@ -811,9 +839,30 @@ func getPeerConfig(c *gin.Context) {
 		return
 	}
 
+	config := string(configBytes)
+
+	// Reemplazar la IP del servidor con el FQDN si está configurado
+	serverEndpoint := getServerEndpoint()
+	if serverEndpoint != "" {
+		// Buscar y reemplazar la línea Endpoint en la configuración
+		lines := strings.Split(config, "\n")
+		for i, line := range lines {
+			if strings.HasPrefix(line, "Endpoint = ") {
+				// Extraer el puerto de la línea actual
+				parts := strings.Split(line, ":")
+				if len(parts) >= 2 {
+					port := parts[len(parts)-1]
+					lines[i] = fmt.Sprintf("Endpoint = %s:%s", serverEndpoint, port)
+				}
+				break
+			}
+		}
+		config = strings.Join(lines, "\n")
+	}
+
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=wg-%s.conf", peer.Name))
-	c.String(http.StatusOK, string(configBytes))
+	c.String(http.StatusOK, config)
 }
 
 func listUsers(c *gin.Context) {

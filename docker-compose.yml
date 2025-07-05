@@ -12,6 +12,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
       - WG_PUBLIC_IP=${WG_PUBLIC_IP}
+      - WG_FQDN=${WG_FQDN}
       - HOST_WG_CONFIGS_PATH=${PWD}/wg-configs
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
