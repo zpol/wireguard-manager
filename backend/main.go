@@ -1263,16 +1263,17 @@ func updatePeer(c *gin.Context) {
 func runDockerOnAllNodes(args ...string) {
 	nodes := []string{"vpngw1.closecircle.fans", "vpngw2.closecircle.fans"}
 	for _, node := range nodes {
-		cmdArgs := append([]string{"ssh", node, "docker"}, args...)
-		log.Printf("[INFO] Ejecutando en %s: ssh %s docker %s", node, node, strings.Join(args, " "))
-		go func(node string, cmdArgs []string) {
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		// Anteponer export PATH para asegurar que docker esté disponible
+		sshCmd := append([]string{"ssh", node, "export PATH=$PATH:/usr/bin; docker " + strings.Join(args, " ")}, )
+		log.Printf("[INFO] Ejecutando en %s: ssh %s export PATH=$PATH:/usr/bin; docker %s", node, node, strings.Join(args, " "))
+		go func(node string, sshCmd []string) {
+			cmd := exec.Command(sshCmd[0], sshCmd[1:]...)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				log.Printf("[ERROR] SSH to %s failed: %v, Output: %s", node, err, string(out))
 			} else {
 				log.Printf("[INFO] SSH to %s OK: %s", node, string(out))
 			}
-		}(node, cmdArgs)
+		}(node, sshCmd)
 	}
 }
