@@ -1263,16 +1263,19 @@ func updatePeer(c *gin.Context) {
 func runDockerOnAllNodes(args ...string) {
 	nodes := []string{"vpngw1.closecircle.fans", "vpngw2.closecircle.fans"}
 	for _, node := range nodes {
-		cmdStr := fmt.Sprintf("export PATH=$PATH:/usr/bin; docker %s", strings.Join(args, " "))
-		sshCmd := []string{"ssh", node, cmdStr}
-		log.Printf("[INFO] Ejecutando en %s: ssh %s \"%s\"", node, node, cmdStr)
+		// Comando de test para depuración:
+		cmdStr := "echo HOLA > /tmp/prueba_backend.txt"
+		// Comando real para lanzar contenedores (descomenta para usar):
+		// cmdStr := fmt.Sprintf("export PATH=$PATH:/usr/bin; docker %s", strings.Join(args, " "))
+		sshCmd := []string{"ssh", "root@" + node, cmdStr}
+		log.Printf("[INFO] Ejecutando en %s: ssh root@%s \"%s\"", node, node, cmdStr)
 		go func(node string, sshCmd []string) {
 			cmd := exec.Command(sshCmd[0], sshCmd[1:]...)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
-				log.Printf("[ERROR] SSH to %s failed: %v, Output: %s", node, err, string(out))
+				log.Printf("[ERROR] SSH to root@%s failed: %v, Output: %s", node, err, string(out))
 			} else {
-				log.Printf("[INFO] SSH to %s OK: %s", node, string(out))
+				log.Printf("[INFO] SSH to root@%s OK: %s", node, string(out))
 			}
 		}(node, sshCmd)
 	}
