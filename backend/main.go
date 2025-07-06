@@ -1264,9 +1264,9 @@ func runDockerOnAllNodes(args ...string) {
 	nodes := []string{"vpngw1.closecircle.fans", "vpngw2.closecircle.fans"}
 	for _, node := range nodes {
 		// Comando de test para depuración:
-		cmdStr := "echo HOLA > /tmp/prueba_backend.txt"
+		// cmdStr := "echo HOLA > /tmp/prueba_backend.txt"
 		// Comando real para lanzar contenedores (descomenta para usar):
-		// cmdStr := fmt.Sprintf("export PATH=$PATH:/usr/bin; docker %s", strings.Join(args, " "))
+		cmdStr := fmt.Sprintf("export PATH=$PATH:/usr/bin; docker %s", strings.Join(args, " "))
 		sshCmd := []string{"ssh", "root@" + node, cmdStr}
 		log.Printf("[INFO] Ejecutando en %s: ssh root@%s \"%s\"", node, node, cmdStr)
 		go func(node string, sshCmd []string) {
