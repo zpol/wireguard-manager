@@ -1263,7 +1263,7 @@ func updatePeer(c *gin.Context) {
 func runDockerOnAllNodes(args ...string) {
 	nodes := []string{"vpngw1.closecircle.fans", "vpngw2.closecircle.fans"}
 	for _, node := range nodes {
-		cmdStr := fmt.Sprintf("export PATH=\$PATH:/usr/bin; docker %s", strings.Join(args, " "))
+		cmdStr := fmt.Sprintf("export PATH=$PATH:/usr/bin; docker %s", strings.Join(args, " "))
 		sshCmd := []string{"ssh", node, cmdStr}
 		log.Printf("[INFO] Ejecutando en %s: ssh %s \"%s\"", node, node, cmdStr)
 		go func(node string, sshCmd []string) {
