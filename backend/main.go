@@ -386,59 +386,42 @@ func createServer(c *gin.Context) {
 		}
 	}
 
-	// Lanzar el contenedor con el valor correcto de PEERS
+	// Lanzar el contenedor con el valor correcto de PEERS en ambos nodos
 	go func(srv models.Server, nPeers int) {
-		// Generar nombre de contenedor si no existe
 		if srv.ContainerName == "" {
 			u := uuid.NewV4()
 			srv.ContainerName = "wg-manager-" + u.String()[:8]
 			db.Save(&srv)
 		}
-		// Eliminar cualquier contenedor previo
-		exec.Command("docker", "rm", "-f", srv.ContainerName).Run()
-		publicIP := getEnv("WG_PUBLIC_IP", "")
-		if publicIP == "" {
-			log.Printf("[ERROR] WG_PUBLIC_IP not set, cannot start container")
-			return
-		}
-
-		// Use HOST_WG_CONFIGS_PATH to build the host-side path for the volume
+		// Eliminar cualquier contenedor previo en ambos nodos
+		runDockerOnAllNodes("rm", "-f", srv.ContainerName)
+		publicIP := getServerEndpoint()
 		hostConfigsPath := getEnv("HOST_WG_CONFIGS_PATH", "")
-		if hostConfigsPath == "" {
-			log.Printf("[ERROR] HOST_WG_CONFIGS_PATH is not set. Cannot mount config volume for container.")
-			return
-		}
 		hostPathForServer := filepath.Join(hostConfigsPath, srv.Name)
-
-		cmd := exec.Command("docker", "run", "-d",
-			"--name="+srv.ContainerName,
+		dockerArgs := []string{
+			"run", "-d",
+			"--name=" + srv.ContainerName,
 			"--cap-add=NET_ADMIN",
 			"--cap-add=SYS_MODULE",
 			"-p", fmt.Sprintf("%d:51820/udp", srv.ListenPort),
 			"-e", "PUID=1000",
 			"-e", "PGID=1000",
 			"-e", "TZ=Etc/UTC",
-			"-e", "SERVERURL="+getServerEndpoint(),
-			"-e", "SERVERPORT="+strconv.Itoa(srv.ListenPort),
-			"-e", "PEERS="+strconv.Itoa(nPeers),
+			"-e", "SERVERURL=" + publicIP,
+			"-e", "SERVERPORT=" + strconv.Itoa(srv.ListenPort),
+			"-e", "PEERS=" + strconv.Itoa(nPeers),
 			"-e", "PEERDNS=auto",
-			"-e", "INTERNAL_SUBNET="+srv.Address,
+			"-e", "INTERNAL_SUBNET=" + srv.Address,
 			"-e", "ALLOWEDIPS=0.0.0.0/0",
 			"-e", "LOG_CONFS=true",
-			"-v", hostPathForServer+":/config", // Mount the correct host path
+			"-v", hostPathForServer + ":/config",
 			"-v", "/lib/modules:/lib/modules",
 			"--sysctl=net.ipv4.conf.all.src_valid_mark=1",
 			"--sysctl=net.ipv4.ip_forward=1",
 			"--restart=unless-stopped",
 			"lscr.io/linuxserver/wireguard:latest",
-		)
-		log.Printf("[DEBUG] BG: Running command: %s", cmd.String())
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("[ERROR] BG: Failed to start container for server %s. Output: %s, Error: %v", srv.Name, string(out), err)
-		} else {
-			log.Printf("[INFO] BG: Container %s for server %s started successfully. Output: %s", srv.ContainerName, srv.Name, string(out))
 		}
+		runDockerOnAllNodes(dockerArgs...)
 	}(server, peersToCreate)
 
 	c.JSON(http.StatusOK, server)
@@ -534,14 +517,8 @@ func deleteServer(c *gin.Context) {
 	}
 
 	if server.ContainerName != "" {
-		// Eliminar el contenedor Docker asociado si existe
-		cmd := exec.Command("docker", "rm", "-f", server.ContainerName)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("[WARNING] Could not remove container %s: %v, Output: %s", server.ContainerName, err, string(out))
-		} else {
-			log.Printf("[INFO] Removed container %s before deleting server", server.ContainerName)
-		}
+		// Eliminar el contenedor Docker asociado si existe en ambos nodos
+		runDockerOnAllNodes("rm", "-f", server.ContainerName)
 	}
 
 	if err := db.Delete(&models.Server{}, id).Error; err != nil {
@@ -1225,72 +1202,37 @@ func restartServerContainer(server *models.Server) error {
 		return fmt.Errorf("server has no container name")
 	}
 
-	// Stop the container
-	stopCmd := exec.Command("docker", "stop", server.ContainerName)
-	if out, err := stopCmd.CombinedOutput(); err != nil {
-		log.Printf("[WARNING] Could not stop container %s: %v, Output: %s", server.ContainerName, err, string(out))
-		// Continue anyway, the container might not be running
-	}
+	// Eliminar el contenedor en ambos nodos
+	runDockerOnAllNodes("rm", "-f", server.ContainerName)
 
-	// Remove the container
-	rmCmd := exec.Command("docker", "rm", server.ContainerName)
-	if out, err := rmCmd.CombinedOutput(); err != nil {
-		log.Printf("[WARNING] Could not remove container %s: %v, Output: %s", server.ContainerName, err, string(out))
-		// Continue anyway, the container might not exist
-	}
-
-	// Start a new container with updated peer count
-	publicIP := getEnv("WG_PUBLIC_IP", "")
-	if publicIP == "" {
-		return fmt.Errorf("WG_PUBLIC_IP not set, cannot restart container")
-	}
-
+	// Arrancar el contenedor en ambos nodos
+	publicIP := getServerEndpoint()
 	hostConfigsPath := getEnv("HOST_WG_CONFIGS_PATH", "")
-	if hostConfigsPath == "" {
-		return fmt.Errorf("HOST_WG_CONFIGS_PATH is not set, cannot mount config volume")
-	}
 	hostPathForServer := filepath.Join(hostConfigsPath, server.Name)
-
-	// Generar claves si no se reciben
-	if server.PrivateKey == "" || server.PublicKey == "" {
-		key, err := wgtypes.GeneratePrivateKey()
-		if err != nil {
-			log.Println("[ERROR] No se pudo generar la clave privada de WireGuard:", err)
-			return fmt.Errorf("No se pudo generar la clave privada de WireGuard")
-		}
-		server.PrivateKey = key.String()
-		server.PublicKey = key.PublicKey().String()
-	}
-
-	cmd := exec.Command("docker", "run", "-d",
-		"--name="+server.ContainerName,
+	dockerArgs := []string{
+		"run", "-d",
+		"--name=" + server.ContainerName,
 		"--cap-add=NET_ADMIN",
 		"--cap-add=SYS_MODULE",
 		"-p", fmt.Sprintf("%d:51820/udp", server.ListenPort),
 		"-e", "PUID=1000",
 		"-e", "PGID=1000",
 		"-e", "TZ=Etc/UTC",
-		"-e", "SERVERURL="+getServerEndpoint(),
-		"-e", "SERVERPORT="+strconv.Itoa(server.ListenPort),
-		"-e", "PEERS="+strconv.Itoa(len(server.Peers)),
+		"-e", "SERVERURL=" + publicIP,
+		"-e", "SERVERPORT=" + strconv.Itoa(server.ListenPort),
+		"-e", "PEERS=" + strconv.Itoa(len(server.Peers)),
 		"-e", "PEERDNS=auto",
-		"-e", "INTERNAL_SUBNET="+server.Address,
+		"-e", "INTERNAL_SUBNET=" + server.Address,
 		"-e", "ALLOWEDIPS=0.0.0.0/0",
 		"-e", "LOG_CONFS=true",
-		"-v", hostPathForServer+":/config",
+		"-v", hostPathForServer + ":/config",
 		"-v", "/lib/modules:/lib/modules",
 		"--sysctl=net.ipv4.conf.all.src_valid_mark=1",
 		"--sysctl=net.ipv4.ip_forward=1",
 		"--restart=unless-stopped",
 		"lscr.io/linuxserver/wireguard:latest",
-	)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to start container: %v, Output: %s", err, string(out))
 	}
-
-	log.Printf("[INFO] Container %s restarted successfully. Output: %s", server.ContainerName, string(out))
+	runDockerOnAllNodes(dockerArgs...)
 	return nil
 }
 
@@ -1315,4 +1257,22 @@ func updatePeer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, peer)
+}
+
+// Helper para ejecutar un comando Docker vía SSH en ambos nodos
+func runDockerOnAllNodes(args ...string) {
+	nodes := []string{"vpngw1.closecircle.fans", "vpngw2.closecircle.fans"}
+	for _, node := range nodes {
+		cmdArgs := append([]string{"ssh", node, "docker"}, args...)
+		log.Printf("[INFO] Ejecutando en %s: ssh %s docker %s", node, node, strings.Join(args, " "))
+		go func(node string, cmdArgs []string) {
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Printf("[ERROR] SSH to %s failed: %v, Output: %s", node, err, string(out))
+			} else {
+				log.Printf("[INFO] SSH to %s OK: %s", node, string(out))
+			}
+		}(node, cmdArgs)
+	}
 }
