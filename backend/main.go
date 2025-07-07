@@ -394,7 +394,7 @@ func createServer(c *gin.Context) {
 			db.Save(&srv)
 		}
 		// Eliminar cualquier contenedor previo en ambos nodos
-		runDockerOnAllNodes("rm", "-f", srv.ContainerName)
+		// runDockerOnAllNodes("rm", "-f", srv.ContainerName)
 		publicIP := getServerEndpoint()
 		hostConfigsPath := getEnv("HOST_WG_CONFIGS_PATH", "")
 		hostPathForServer := filepath.Join(hostConfigsPath, srv.Name)
