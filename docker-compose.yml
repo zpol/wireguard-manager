@@ -17,6 +17,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./wg-configs:/wg-configs
+      - ~/.ssh:/root/.ssh:ro
     depends_on:
       postgres:
         condition: service_healthy
