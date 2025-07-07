@@ -14,6 +14,7 @@ services:
       - WG_PUBLIC_IP=${WG_PUBLIC_IP}
       - WG_FQDN=${WG_FQDN}
       - HOST_WG_CONFIGS_PATH=${PWD}/wg-configs
+      - SSH_NODES=${SSH_NODES}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./wg-configs:/wg-configs

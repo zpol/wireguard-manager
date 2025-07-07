@@ -24,5 +24,12 @@ RUN go build -o main .
 # Expose the port the app runs on
 EXPOSE 8080
 
-# Run the application
-CMD ["./main"] 
+# Copia el entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Usa el entrypoint personalizado
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Elimina el CMD antiguo
+# CMD ["./main"] 
