@@ -1202,10 +1202,13 @@ func restartServerContainer(server *models.Server) error {
 		return fmt.Errorf("server has no container name")
 	}
 
-	// Eliminar el contenedor en ambos nodos
+	// Eliminar el contenedor en ambos nodos (ignora error si no existe)
 	runDockerOnAllNodes("rm", "-f", server.ContainerName)
 
-	// Arrancar el contenedor en ambos nodos
+	// Espera breve para asegurar que el contenedor se elimina antes de crear el nuevo
+	time.Sleep(2 * time.Second)
+
+	// Arrancar el contenedor en ambos nodos (docker run SIEMPRE, nunca docker start tras rm)
 	publicIP := getServerEndpoint()
 	hostConfigsPath := getEnv("HOST_WG_CONFIGS_PATH", "")
 	hostPathForServer := filepath.Join(hostConfigsPath, server.Name)
