@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  MenuItem,
   Typography,
   Paper,
   Table,
@@ -38,6 +39,9 @@ interface Server {
   address: string;
   peers: any[];
   status: string; // 'active' or 'inactive'
+  deploymentMode?: string;
+  targetNodes?: string[];
+  activeNodes?: string[];
 }
 
 const Servers: React.FC = () => {
@@ -52,6 +56,7 @@ const Servers: React.FC = () => {
     dns: '8.8.8.8',
     mtu: 1420,
     initialPeers: 1,
+    deploymentMode: 'local',
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -94,6 +99,7 @@ const Servers: React.FC = () => {
         dns: '8.8.8.8',
         mtu: 1420,
         initialPeers: 1,
+        deploymentMode: 'local',
       });
       fetchServers();
     } catch (error: any) {
@@ -156,13 +162,14 @@ const Servers: React.FC = () => {
               <TableCell>Listen Port</TableCell>
               <TableCell>Address</TableCell>
               <TableCell>Peers</TableCell>
+              <TableCell>Active Nodes</TableCell>
               <TableCell sx={{ width: '40%' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {servers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   No servers found. Create your first WireGuard server to get started.
                 </TableCell>
               </TableRow>
@@ -180,6 +187,11 @@ const Servers: React.FC = () => {
                   <TableCell>{server.listenPort}</TableCell>
                   <TableCell>{server.address}</TableCell>
                   <TableCell>{server.peers ? server.peers.length : 0}</TableCell>
+                  <TableCell>
+                    {server.activeNodes && server.activeNodes.length > 0
+                      ? server.activeNodes.join(', ')
+                      : '—'}
+                  </TableCell>
                   <TableCell>
                     <Tooltip title="Start">
                       <span>
@@ -279,6 +291,18 @@ const Servers: React.FC = () => {
             }
             helperText="Number of peers to create automatically (0-10)"
           />
+          <TextField
+            select
+            margin="dense"
+            label="Deployment Mode"
+            fullWidth
+            value={newServer.deploymentMode}
+            onChange={(e) => setNewServer({ ...newServer, deploymentMode: e.target.value })}
+            helperText="Choose where the WireGuard container should run"
+          >
+            <MenuItem value="local">Local node</MenuItem>
+            <MenuItem value="all">All SSH nodes</MenuItem>
+          </TextField>
           {createError && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {createError}

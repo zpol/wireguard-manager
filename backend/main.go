@@ -29,11 +29,59 @@ var (
 	jwtKey = []byte(getEnv("JWT_SECRET", "default-secret-key-change-in-production"))
 )
 
+const localNodeName = "local"
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
 	return defaultValue
+}
+
+func parseNodes(nodesStr string) []string {
+	nodes := strings.Fields(nodesStr)
+	result := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		trimmed := strings.TrimSpace(node)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func resolveTargetNodes(mode string) ([]string, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "" {
+		mode = "all"
+	}
+	switch mode {
+	case "local":
+		return []string{localNodeName}, nil
+	case "all":
+		nodes := parseNodes(getEnv("SSH_NODES", ""))
+		if len(nodes) == 0 {
+			return nil, fmt.Errorf("SSH_NODES is empty")
+		}
+		return nodes, nil
+	default:
+		return nil, fmt.Errorf("invalid deploymentMode: %s", mode)
+	}
+}
+
+func getEffectiveTargetNodes(server models.Server) []string {
+	if strings.TrimSpace(server.TargetNodes) != "" {
+		return parseNodes(server.TargetNodes)
+	}
+	mode := server.DeploymentMode
+	if mode == "" {
+		mode = "all"
+	}
+	nodes, err := resolveTargetNodes(mode)
+	if err != nil {
+		return []string{}
+	}
+	return nodes
 }
 
 // Función para obtener el endpoint del servidor (FQDN o IP)
@@ -317,6 +365,7 @@ func createServer(c *gin.Context) {
 		DNS        string `json:"dns"`
 		MTU        int    `json:"mtu"`
 		InitialPeers int  `json:"initialPeers"`
+		DeploymentMode string `json:"deploymentMode"`
 	}
 	var input ServerInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -347,6 +396,12 @@ func createServer(c *gin.Context) {
 		return
 	}
 
+	targetNodes, err := resolveTargetNodes(input.DeploymentMode)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	log.Printf("[DEBUG] Server input: %+v\n", input)
 	server := models.Server{
 		Name:       input.Name,
@@ -357,6 +412,8 @@ func createServer(c *gin.Context) {
 		DNS:        input.DNS,
 		MTU:        input.MTU,
 		ConfigPath: configPathForBackend, // Use backend-managed path
+		DeploymentMode: strings.ToLower(strings.TrimSpace(input.DeploymentMode)),
+		TargetNodes: strings.Join(targetNodes, " "),
 	}
 	log.Printf("[DEBUG] About to insert server: %+v\n", server)
 	if err := db.Create(&server).Error; err != nil {
@@ -386,8 +443,9 @@ func createServer(c *gin.Context) {
 		}
 	}
 
-	// Lanzar el contenedor con el valor correcto de PEERS en ambos nodos
+	// Lanzar el contenedor con el valor correcto de PEERS en los nodos seleccionados
 	go func(srv models.Server, nPeers int) {
+		targetNodes := getEffectiveTargetNodes(srv)
 		if srv.ContainerName == "" {
 			u := uuid.NewV4()
 			srv.ContainerName = "wg-manager-" + u.String()[:8]
@@ -421,41 +479,10 @@ func createServer(c *gin.Context) {
 			"--restart=unless-stopped",
 			"lscr.io/linuxserver/wireguard:latest",
 		}
-		runDockerOnAllNodes(dockerArgs...)
+		runDockerOnNodes(targetNodes, dockerArgs...)
 	}(server, peersToCreate)
 
 	c.JSON(http.StatusOK, server)
-}
-
-func getBulkServerStatus() (map[string]string, error) {
-	// This command lists all running containers with a name starting with "wg-manager-"
-	// and formats the output as "container_name:status"
-	cmd := exec.Command("docker", "ps", "--filter", "name=wg-manager-", "--format", "{{.Names}}:{{.State}}")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("[ERROR] Failed to execute 'docker ps': %v, Output: %s", err, string(out))
-		return nil, err
-	}
-
-	statusMap := make(map[string]string)
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return statusMap, nil // No containers found
-	}
-
-	for _, line := range lines {
-		parts := strings.Split(line, ":")
-		if len(parts) == 2 {
-			// e.g. parts[0] = "wg-manager-ab12cd", parts[1] = "running"
-			status := "inactive"
-			if parts[1] == "running" {
-				status = "active"
-			}
-			statusMap[parts[0]] = status
-		}
-	}
-	log.Printf("[DEBUG] getBulkServerStatus found active containers: %v", statusMap)
-	return statusMap, nil
 }
 
 func listServers(c *gin.Context) {
@@ -464,12 +491,6 @@ func listServers(c *gin.Context) {
 	if err := db.Preload("Peers").Find(&servers).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list servers"})
 		return
-	}
-
-	statusMap, err := getBulkServerStatus()
-	if err != nil {
-		log.Printf("[WARNING] Could not get bulk server status: %v", err)
-		// Continue without status info if docker command fails
 	}
 
 	// Define a specific struct for the response to control JSON field names (camelCase)
@@ -481,15 +502,28 @@ func listServers(c *gin.Context) {
 		ListenPort int    `json:"listenPort"`
 		Status     string `json:"status"`
 		PublicKey  string `json:"publicKey"`
+		DeploymentMode string `json:"deploymentMode"`
+		TargetNodes []string `json:"targetNodes"`
+		ActiveNodes []string `json:"activeNodes"`
 		Peers      []models.Peer `json:"peers"`
 	}
 
 	response := make([]ServerResponse, 0)
 	for _, s := range servers {
-		// interfaceName := getInterfaceName(s.ConfigPath)
-		status, ok := statusMap[s.ContainerName]
-		if !ok {
-			status = "inactive" // Default to inactive if not found in docker ps output
+		status := "inactive"
+		targetNodes := getEffectiveTargetNodes(s)
+		activeNodes := make([]string, 0)
+		for _, node := range targetNodes {
+			nodeStatus, err := getContainerStatusOnNode(node, s.ContainerName)
+			if err != nil {
+				continue
+			}
+			if nodeStatus == "active" {
+				activeNodes = append(activeNodes, node)
+			}
+		}
+		if len(activeNodes) > 0 {
+			status = "active"
 		}
 		response = append(response, ServerResponse{
 			ID:         s.ID,
@@ -498,6 +532,9 @@ func listServers(c *gin.Context) {
 			ListenPort: s.ListenPort,
 			Status:     status,
 			PublicKey:  s.PublicKey,
+			DeploymentMode: s.DeploymentMode,
+			TargetNodes: targetNodes,
+			ActiveNodes: activeNodes,
 			Peers:      s.Peers,
 		})
 	}
@@ -518,7 +555,7 @@ func deleteServer(c *gin.Context) {
 
 	if server.ContainerName != "" {
 		// Eliminar el contenedor Docker asociado si existe en ambos nodos
-		runDockerOnAllNodes("rm", "-f", server.ContainerName)
+		runDockerOnNodes(getEffectiveTargetNodes(server), "rm", "-f", server.ContainerName)
 	}
 
 	if err := db.Delete(&models.Server{}, id).Error; err != nil {
@@ -1111,13 +1148,7 @@ func startServer(c *gin.Context) {
 
 	// Start the container in the background
 	go func() {
-		cmd := exec.Command("docker", "start", server.ContainerName)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("[ERROR] Failed to start container %s: %v, Output: %s", server.ContainerName, err, string(out))
-		} else {
-			log.Printf("[INFO] Container %s started successfully", server.ContainerName)
-		}
+		runDockerOnNodes(getEffectiveTargetNodes(server), "start", server.ContainerName)
 	}()
 
 	c.JSON(http.StatusOK, gin.H{"message": "Starting server container"})
@@ -1138,13 +1169,7 @@ func stopServer(c *gin.Context) {
 
 	// Stop the container in the background
 	go func() {
-		cmd := exec.Command("docker", "stop", server.ContainerName)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("[ERROR] Failed to stop container %s: %v, Output: %s", server.ContainerName, err, string(out))
-		} else {
-			log.Printf("[INFO] Container %s stopped successfully", server.ContainerName)
-		}
+		runDockerOnNodes(getEffectiveTargetNodes(server), "stop", server.ContainerName)
 	}()
 
 	c.JSON(http.StatusOK, gin.H{"message": "Stopping server container"})
@@ -1201,9 +1226,10 @@ func restartServerContainer(server *models.Server) error {
 	if server.ContainerName == "" {
 		return fmt.Errorf("server has no container name")
 	}
+	targetNodes := getEffectiveTargetNodes(*server)
 
 	// Eliminar el contenedor en ambos nodos (ignora error si no existe)
-	runDockerOnAllNodes("rm", "-f", server.ContainerName)
+	runDockerOnNodes(targetNodes, "rm", "-f", server.ContainerName)
 
 	// Espera breve para asegurar que el contenedor se elimina antes de crear el nuevo
 	time.Sleep(2 * time.Second)
@@ -1235,7 +1261,7 @@ func restartServerContainer(server *models.Server) error {
 		"--restart=unless-stopped",
 		"lscr.io/linuxserver/wireguard:latest",
 	}
-	runDockerOnAllNodes(dockerArgs...)
+	runDockerOnNodes(targetNodes, dockerArgs...)
 	return nil
 }
 
@@ -1263,23 +1289,43 @@ func updatePeer(c *gin.Context) {
 }
 
 // Helper para ejecutar un comando Docker vía SSH en ambos nodos
-func runDockerOnAllNodes(args ...string) {
-	nodes := []string{"vpngw1.closecircle.fans", "vpngw2.closecircle.fans"}
+func runDockerOnNodes(nodes []string, args ...string) {
 	for _, node := range nodes {
-		// Comando de test para depuración:
-		// cmdStr := "echo HOLA > /tmp/prueba_backend.txt"
-		// Comando real para lanzar contenedores (descomenta para usar):
-		cmdStr := fmt.Sprintf("export PATH=$PATH:/usr/bin; docker %s", strings.Join(args, " "))
-		sshCmd := []string{"ssh", "root@" + node, cmdStr}
-		log.Printf("[INFO] Ejecutando en %s: ssh root@%s \"%s\"", node, node, cmdStr)
-		go func(node string, sshCmd []string) {
-			cmd := exec.Command(sshCmd[0], sshCmd[1:]...)
-			out, err := cmd.CombinedOutput()
+		node := node
+		log.Printf("[INFO] Ejecutando docker %s en %s", strings.Join(args, " "), node)
+		go func() {
+			out, err := runDockerCommandOnNode(node, args...)
 			if err != nil {
-				log.Printf("[ERROR] SSH to root@%s failed: %v, Output: %s", node, err, string(out))
-			} else {
-				log.Printf("[INFO] SSH to root@%s OK: %s", node, string(out))
+				log.Printf("[ERROR] Docker command failed on %s: %v, Output: %s", node, err, string(out))
+			} else if len(out) > 0 {
+				log.Printf("[INFO] Docker command output on %s: %s", node, strings.TrimSpace(string(out)))
 			}
-		}(node, sshCmd)
+		}()
 	}
+}
+
+func runDockerCommandOnNode(node string, args ...string) ([]byte, error) {
+	if node == localNodeName {
+		cmd := exec.Command("docker", args...)
+		return cmd.CombinedOutput()
+	}
+	cmdStr := fmt.Sprintf("export PATH=$PATH:/usr/bin; docker %s", strings.Join(args, " "))
+	sshCmd := []string{"ssh", "root@" + node, cmdStr}
+	cmd := exec.Command(sshCmd[0], sshCmd[1:]...)
+	return cmd.CombinedOutput()
+}
+
+func getContainerStatusOnNode(node, containerName string) (string, error) {
+	if strings.TrimSpace(containerName) == "" {
+		return "inactive", fmt.Errorf("empty container name")
+	}
+	out, err := runDockerCommandOnNode(node, "inspect", "--format={{.State.Status}}", containerName)
+	if err != nil {
+		return "inactive", err
+	}
+	status := strings.TrimSpace(string(out))
+	if status == "running" {
+		return "active", nil
+	}
+	return "inactive", nil
 }

@@ -26,6 +26,8 @@ type Server struct {
 	MTU           int    `gorm:"default:1420"`
 	ConfigPath    string `gorm:"not null"`
 	LastSync      time.Time
+	DeploymentMode string `gorm:"not null;default:'all'"`
+	TargetNodes    string `gorm:"type:text"`
 	Peers         []Peer
 }
 
