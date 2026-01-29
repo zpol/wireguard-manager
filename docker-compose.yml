@@ -3,7 +3,7 @@ services:
     build: ./backend
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - DB_HOST=postgres
       - DB_USER=wireguard
@@ -30,7 +30,7 @@ services:
       args:
         - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8080}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - backend
     restart: unless-stopped
@@ -38,7 +38,7 @@ services:
   postgres:
     image: postgres:15-alpine
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       - POSTGRES_USER=wireguard
       - POSTGRES_PASSWORD=${DB_PASSWORD}
