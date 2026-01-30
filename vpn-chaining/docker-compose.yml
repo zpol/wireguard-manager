@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  client:
+    build: .
+    container_name: vpn-client
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun
+    environment:
+      - ROLE=client
+      - DNS_IP=1.1.1.1
+      - NODE_A_ENDPOINT=node-a:51820
+    volumes:
+      - client-data:/data
+      - shared-keys:/shared/keys
+    networks:
+      - wgnet
+    depends_on:
+      - node-a
+    restart: unless-stopped
+
+  node-a:
+    build: .
+    container_name: node-a
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun
+    environment:
+      - ROLE=node-a
+      - NODE_B_ENDPOINT=node-b:51821
+    volumes:
+      - node-a-data:/data
+      - shared-keys:/shared/keys
+    networks:
+      - wgnet
+    depends_on:
+      - node-b
+    restart: unless-stopped
+
+  node-b:
+    build: .
+    container_name: node-b
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun
+    environment:
+      - ROLE=node-b
+      - NODE_C_ENDPOINT=node-c:51822
+    volumes:
+      - node-b-data:/data
+      - shared-keys:/shared/keys
+    networks:
+      - wgnet
+    depends_on:
+      - node-c
+    restart: unless-stopped
+
+  node-c:
+    build: .
+    container_name: node-c
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun
+    environment:
+      - ROLE=node-c
+    volumes:
+      - node-c-data:/data
+      - shared-keys:/shared/keys
+    networks:
+      - wgnet
+    restart: unless-stopped
+
+networks:
+  wgnet:
+    driver: bridge
+
+volumes:
+  client-data:
+  node-a-data:
+  node-b-data:
+  node-c-data:
+  shared-keys:
+

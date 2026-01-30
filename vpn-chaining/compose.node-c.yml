@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  node-c:
+    build: .
+    container_name: node-c
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun
+    environment:
+      - ROLE=node-c
+      - PORT_BC=${PORT_BC:-51822}
+      - CLIENT_SUBNET=${CLIENT_SUBNET:-10.10.0.0/24}
+      - ROLE_NODE_C_BC_ADDR=${ROLE_NODE_C_BC_ADDR:-10.30.0.2/24}
+      - ROLE_NODE_B_BC_ADDR=${ROLE_NODE_B_BC_ADDR:-10.30.0.1/24}
+    volumes:
+      - ./data/node-c:/data
+      - ./shared/keys:/shared/keys
+    restart: unless-stopped
+

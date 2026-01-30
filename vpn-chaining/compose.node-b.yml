@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  node-b:
+    build: .
+    container_name: node-b
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun
+    environment:
+      - ROLE=node-b
+      - NODE_C_ENDPOINT=${NODE_C_ENDPOINT}
+      - PORT_AB=${PORT_AB:-51821}
+      - PORT_BC=${PORT_BC:-51822}
+      - CLIENT_SUBNET=${CLIENT_SUBNET:-10.10.0.0/24}
+      - ROLE_NODE_B_AB_ADDR=${ROLE_NODE_B_AB_ADDR:-10.20.0.2/24}
+      - ROLE_NODE_B_BC_ADDR=${ROLE_NODE_B_BC_ADDR:-10.30.0.1/24}
+      - ROLE_NODE_A_AB_ADDR=${ROLE_NODE_A_AB_ADDR:-10.20.0.1/24}
+    volumes:
+      - ./data/node-b:/data
+      - ./shared/keys:/shared/keys
+    restart: unless-stopped
+

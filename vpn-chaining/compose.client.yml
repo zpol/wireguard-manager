@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  client:
+    build: .
+    container_name: vpn-client
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun
+    environment:
+      - ROLE=client
+      - DNS_IP=${DNS_IP:-1.1.1.1}
+      - NODE_A_ENDPOINT=${NODE_A_ENDPOINT}
+      - PORT_CLIENT=${PORT_CLIENT:-51820}
+      - CLIENT_SUBNET=${CLIENT_SUBNET:-10.10.0.0/24}
+      - ROLE_CLIENT_ADDR=${ROLE_CLIENT_ADDR:-10.10.0.2/24}
+    volumes:
+      - ./data/client:/data
+      - ./shared/keys:/shared/keys
+    restart: unless-stopped
+
